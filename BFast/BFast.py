@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts):
+def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
     kF = 2*np.pi/BoxSize
     
     kx = 2*np.pi * np.fft.fftfreq(grid,BoxSize/grid)
@@ -28,13 +28,13 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts):
     bin_center = tf.constant([fc+i*dk for i in range(Nbins)])
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
-
-    masked_maps_fft = [tf.where(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),map_fft,0.+0.j) for i in range(Nbins)]
-    masked_maps_fft = tf.concat(masked_maps_fft,axis=0)
+    bools = tf.convert_to_tensor([tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]) for i in range(Nbins)],dtype=tf.complex64)
+    masked_maps_fft = tf.einsum("ijkl,mjkl->mjkl",map_fft,bools)
     masked_maps = tf.signal.irfft3d(masked_maps_fft)
     
-    Pk = tf.stack([tf.reduce_sum(masked_maps[i]**2) for i in range(Nbins)])
-    Bk = tf.stack([tf.reduce_sum(masked_maps[bin_indices[i,0]] * masked_maps[bin_indices[i,1]] * masked_maps[bin_indices[i,2]]) for i in range(bin_indices.shape[0])])
+    Pk = tf.stack([tf.reduce_sum(masked_maps[i]**2) for i in tqdm(range(Nbins),disable= not verbose)])
+    Bk = tf.stack([tf.reduce_sum(masked_maps[bin_indices[i,0]]*masked_maps[bin_indices[i,1]]*masked_maps[bin_indices[i,2]])\
+                   for i in tqdm(range(bin_indices.shape[0]),disable=not verbose)])
     return Pk, Bk
 
 def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
@@ -46,7 +46,6 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
         counts = np.load(file_name,allow_pickle=True).item()
         compute_counts=False
     else:
-        print(f"No precomputed counts found. Computing this instead of bispectrum")
         compute_counts=True
     
     if compute_counts:
@@ -71,7 +70,7 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
     bin_indices = ((counts['bin_centers'] - fc) // dk).astype(np.int64)
     
     if compute_counts:
-        Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts)
+        Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
         Pk = Pk.numpy()
         Bk = Bk.numpy()
         counts['counts_P'] = Pk * grid**3
@@ -81,7 +80,7 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
     
     compute_counts=False
     
-    Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts)
+    Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
     Pk = Pk.numpy()
     Bk = Bk.numpy()
         
