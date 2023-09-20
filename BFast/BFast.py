@@ -210,7 +210,7 @@ def Pk(delta,BoxSize,MAS=None):
     counts = tf.stack(counts)
 
     map_fft = tf.cast(tf.expand_dims(tf.signal.fft3d(delta),axis=0),dtype=tf.complex128)
-    
+
     if MAS:
         p = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         fac = np.pi * kmesh/kF/grid
@@ -225,6 +225,7 @@ def Pk(delta,BoxSize,MAS=None):
         bool = tf.cast(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),dtype=tf.complex128)
         binned_field = bool * map_fft
         Pk.append(tf.math.real(tf.reduce_sum(binned_field*tf.math.conj(binned_field))))
+
     Pk = tf.stack(Pk) / counts * BoxSize**3 / grid**6
     
     return Pk
