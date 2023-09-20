@@ -15,7 +15,7 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,
     bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
-    bools = jnp.array([(kgrid >= kF*bin_lower[i])*(kgrid < kF*bin_upper[i]) for i in jnp.arange(Nbins)],dtype=jnp.complex128)
+    bools = jnp.array([(kgrid >= kF*bin_lower[i])*(kgrid < kF*bin_upper[i]) for i in jnp.arange(Nbins)],dtype=jnp.complex64)
 
     if compute_counts:
         masked_maps_fft = bools
@@ -25,12 +25,15 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,
         if p_MAS:
             fac = jnp.pi * kmesh/kF/grid
             mas_fac = (fac/jnp.sin(fac))**p_MAS
-            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex128)
+            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
             mas_fac = jnp.prod(mas_fac,0)
             map_fft *= mas_fac
+            del mas_fac
         
         masked_maps_fft = jnp.einsum("jkl,mjkl->mjkl",map_fft,bools)
-
+        
+    del kmesh
+    
     masked_maps = jnp.fft.irfftn(masked_maps_fft,axes=[1,2,3])
     
     _, Pk = jax.lax.scan(f= (lambda carry, bin: (carry,jnp.sum(masked_maps[bin]**2.))),init=0.,xs=jnp.arange(Nbins))
@@ -139,14 +142,17 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbo
     map_fft = jnp.array(jnp.fft.rfftn(delta),dtype=jnp.complex64)
     
     if compute_counts:
-        map_fft = jnp.array(jnp.ones_like(map_fft),dtype=jnp.complex128)
+        map_fft = jnp.array(jnp.ones_like(map_fft),dtype=jnp.complex64)
         
     elif p_MAS:
-        fac = jnp.pi * kmesh/kF/grid
-        mas_fac = (fac/jnp.sin(fac))**p_MAS
-        mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
-        mas_fac = jnp.prod(mas_fac,0)
-        map_fft *= mas_fac    
+        for i in jnp.arange(3):
+            fac = jnp.pi * kmesh[i]/kF/grid
+            mas_fac = (fac/jnp.sin(fac))**p_MAS
+            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
+            map_fft *= mas_fac
+        del mas_fac
+
+    del kmesh
 
     def _P(carry,i):
         return carry, jnp.sum(jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[i])*(kgrid < kF*bin_upper[i])),dtype=jnp.float64)**2.)
@@ -154,9 +160,9 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbo
     _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
 
     def _B(carry,bin_index):
-        field1 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[0]])*(kgrid < kF*bin_upper[bin_index[0]])),dtype=jnp.float64)
-        field2 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[1]])*(kgrid < kF*bin_upper[bin_index[1]])),dtype=jnp.float64)
-        field3 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[2]])*(kgrid < kF*bin_upper[bin_index[2]])),dtype=jnp.float64)
+        field1 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[0]])*(kgrid < kF*bin_upper[bin_index[0]])),dtype=jnp.float32)
+        field2 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[1]])*(kgrid < kF*bin_upper[bin_index[1]])),dtype=jnp.float32)
+        field3 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[2]])*(kgrid < kF*bin_upper[bin_index[2]])),dtype=jnp.float32)
         return carry, jnp.sum(field1*field2*field3)   
         
     _, Bk = jax.lax.scan(f=_B,init=0.,xs=bin_indices)
@@ -266,24 +272,28 @@ def Pk(delta,BoxSize,MAS=None):
         binned_field = fft*(kgrid >= bin_lower[i])*(kgrid < bin_upper[i])
         return fft, jnp.sum(jnp.real(binned_field)**2. + jnp.imag(binned_field)**2.)/2
 
+    map_fft = jnp.array(jnp.fft.fftn(delta),dtype=jnp.complex128)
+
+    if MAS:
+        p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
+        for i in jnp.arange(3):
+            fac = jnp.pi * kmesh[i]/grid
+            mas_fac = (fac/jnp.sin(fac))**p_MAS
+            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex128)
+            map_fft *= mas_fac
+        del mas_fac
+
+    del kmesh
+    
+    _, Pk = jax.lax.scan(f=_P,init=map_fft,xs=jnp.arange(Nbins))
+    
     ones_fft = jnp.ones((grid,grid,grid),dtype=jnp.complex128)
     _, counts = jax.lax.scan(f=_P,init=ones_fft,xs=jnp.arange(Nbins))
 
     ks_fft = ones_fft * jnp.sqrt(kgrid)
     _, k_means = jax.lax.scan(f=_P,init=ks_fft,xs=jnp.arange(Nbins))
+    
     k_means = kF * k_means / counts
-    
-    map_fft = jnp.array(jnp.fft.fftn(delta),dtype=jnp.complex128)
-    
-    if MAS:
-        p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-        fac = jnp.pi * kmesh/grid
-        mas_fac = (fac/jnp.sin(fac))**p_MAS
-        mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex128)
-        mas_fac = jnp.prod(mas_fac,0)
-        map_fft *= mas_fac
-    
-    _, Pk = jax.lax.scan(f=_P,init=map_fft,xs=jnp.arange(Nbins))
     Pk = Pk / counts * BoxSize**3 / grid**6
     
     return jnp.array([k_means,Pk, counts]).T
