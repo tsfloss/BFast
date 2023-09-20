@@ -3,7 +3,6 @@ os.environ['JAX_ENABLE_X64']= 'True'
 import numpy as np
 import jax.numpy as jnp
 import jax
-from tqdm.auto import tqdm
 
 def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose):
     kF = 2*jnp.pi/BoxSize
@@ -33,14 +32,10 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,
         masked_maps_fft = jnp.einsum("jkl,mjkl->mjkl",map_fft,bools)
 
     masked_maps = jnp.fft.irfftn(masked_maps_fft,axes=[1,2,3])
-    # Pk = jnp.stack([jnp.sum(masked_maps[i]**2) for i in tqdm(range(Nbins),disable= not verbose)])
+    
     _, Pk = jax.lax.scan(f= (lambda carry, bin: (carry,jnp.sum(masked_maps[bin]**2.))),init=0.,xs=jnp.arange(Nbins))
-    # Bk = jnp.stack([jnp.sum(masked_maps[bin_indices[i,0]]*masked_maps[bin_indices[i,1]]*masked_maps[bin_indices[i,2]])\
-    #                for i in tqdm(range(bin_indices.shape[0]),disable=not verbose)])
-
-    # Bk = jnp.stack([jnp.sum(jnp.prod(masked_maps[bin_index],axis=0))\
-    #                 for bin_index in tqdm(bin_indices,disable=not verbose)])
     _, Bk = jax.lax.scan(f= (lambda carry, bin_index: (carry,jnp.sum(jnp.prod(masked_maps[bin_index],axis=0)))),init=0.,xs=bin_indices)
+    
     return Pk, Bk
 
 def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
@@ -128,8 +123,6 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
     result[:,7] = counts['counts_B']
     
     return result
-
-from tqdm.auto import tqdm
 
 def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose):
     kF = 2*jnp.pi/BoxSize
