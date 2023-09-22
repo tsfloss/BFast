@@ -147,7 +147,7 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose
     elif MAS:
         p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         for i in jnp.arange(3):
-            map_fft *= jnp.sinc(kmesh[i]/kF/grid)**-p_MAS
+            map_fft *= jnp.array(jnp.sinc(kmesh[i]/kF/grid)**-p_MAS,dtype=jnp.complex64)
 
     del kmesh
 
