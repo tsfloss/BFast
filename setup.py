@@ -17,4 +17,7 @@ setup(
     license = "MIT",
     url = "https://github.com/tsfloss/BFast",
     packages=['BFast'],
+    install_requires=[
+          'numpy',"tqdm","jax-tqdm",
+      ],
 )

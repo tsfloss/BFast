@@ -3,15 +3,16 @@ os.environ['JAX_ENABLE_X64']= 'True'
 import numpy as np
 import jax.numpy as jnp
 import jax
+from jax_tqdm import scan_tqdm
 
-def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose):
+def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
     kF = 2*jnp.pi/BoxSize
     
     kx = 2*jnp.pi * jnp.fft.fftfreq(grid,BoxSize/grid)
     kz = 2*jnp.pi * jnp.fft.rfftfreq(grid,BoxSize/grid)
     kmesh = jnp.array(jnp.meshgrid(kx,kx,kz,indexing='ij'),dtype=jnp.float64)
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
-    
+
     bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
@@ -20,9 +21,10 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,
     if compute_counts:
         masked_maps_fft = bools
     else:
-        map_fft = jnp.fft.rfftn(delta)
+        map_fft = jnp.array(jnp.fft.rfftn(delta),dtype=jnp.complex64)
 
-        if p_MAS:
+        if MAS:
+            p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
             fac = jnp.pi * kmesh/kF/grid
             mas_fac = (fac/jnp.sin(fac))**p_MAS
             mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
@@ -41,7 +43,7 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,
     
     return Pk, Bk
 
-def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
+def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,verbose=False):
     """
     Computes binned bispectrum of field for given binning and triangles
 
@@ -76,7 +78,7 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
     This is saved in a file in the local directory for later use, when measuring from other density fields but with the same binning.
     """
     grid = delta.shape[0]
-    file_name = f"BFast_BkCounts_LBox{int(BoxSize)}_Grid{int(grid)}_Binning{int(dk)}kF_fc{int(fc)}_NBins{int(Nbins)}_TriangleType{triangle_type}.npy"
+    file_name = f"BFast_BkCounts_LBox{float(BoxSize):.2f}_Grid{int(grid)}_Binning{float(dk):.2f}kF_fc{float(fc):.2f}_NBins{int(Nbins)}_TriangleType{triangle_type}.npy"
 
     if os.path.exists(file_name):
         if verbose: print(f"Loading Counts from {file_name}")
@@ -104,12 +106,10 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
                                               for i in fc+np.arange(0,Nbins)*dk])
             
     if verbose: print(f"Considering {len(counts['bin_centers'])} Triangle Configurations ({triangle_type})")
-    bin_indices = ((counts['bin_centers'] - fc) // dk).astype(np.int64)
-
-    p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
+    bin_indices = jnp.array(((counts['bin_centers'] - fc) // dk),dtype=jnp.int64)
     
     if compute_counts:
-        Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose)
+        Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
         counts['counts_P'] = Pk * grid**3
         counts['counts_B'] = Bk * grid**6
         np.save(file_name,counts)
@@ -117,7 +117,7 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
     
     compute_counts=False
     
-    Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose)
+    Pk, Bk = _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
         
     result = np.ones((len(counts['bin_centers']),8))
     result[:,:3] = counts['bin_centers']
@@ -127,7 +127,7 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS=None,verbose=False):
     
     return result
 
-def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose):
+def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
     kF = 2*jnp.pi/BoxSize
     
     kx = 2*jnp.pi * jnp.fft.fftfreq(grid,BoxSize/grid)
@@ -144,7 +144,8 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbo
     if compute_counts:
         map_fft = jnp.array(jnp.ones_like(map_fft),dtype=jnp.complex64)
         
-    elif p_MAS:
+    if MAS:
+        p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         for i in jnp.arange(3):
             fac = jnp.pi * kmesh[i]/kF/grid
             mas_fac = (fac/jnp.sin(fac))**p_MAS
@@ -154,22 +155,25 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbo
 
     del kmesh
 
+    @scan_tqdm(Nbins)
     def _P(carry,i):
         return carry, jnp.sum(jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[i])*(kgrid < kF*bin_upper[i])),dtype=jnp.float64)**2.)
 
     _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
-
-    def _B(carry,bin_index):
+    
+    @scan_tqdm(bin_indices.shape[0])
+    def _B(carry,i):
+        bin_index = bin_indices[i]
         field1 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[0]])*(kgrid < kF*bin_upper[bin_index[0]])),dtype=jnp.float32)
         field2 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[1]])*(kgrid < kF*bin_upper[bin_index[1]])),dtype=jnp.float32)
         field3 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[2]])*(kgrid < kF*bin_upper[bin_index[2]])),dtype=jnp.float32)
         return carry, jnp.sum(field1*field2*field3)   
         
-    _, Bk = jax.lax.scan(f=_B,init=0.,xs=bin_indices)
+    _, Bk = jax.lax.scan(f=_B,init=0.,xs=jnp.arange(bin_indices.shape[0]))
 
     return Pk, Bk
 
-def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
+def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,verbose=False):
     """
     Computes binned bispectrum of field for given binning and triangles
 
@@ -204,7 +208,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
     This is saved in a file in the local directory for later use, when measuring from other density fields but with the same binning.
     """
     grid = delta.shape[0]
-    file_name = f"BFast_BkCounts_LBox{int(BoxSize)}_Grid{int(grid)}_Binning{int(dk)}kF_fc{int(fc)}_NBins{int(Nbins)}_TriangleType{triangle_type}.npy"
+    file_name = f"BFast_BkCounts_LBox{float(BoxSize):.2f}_Grid{int(grid)}_Binning{float(dk):.2f}kF_fc{float(fc):.2f}_NBins{int(Nbins)}_TriangleType{triangle_type}.npy"
         
     if os.path.exists(file_name):
         if verbose: print(f"Loading Counts from {file_name}")
@@ -232,12 +236,10 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
                                               for i in fc+np.arange(0,Nbins)*dk])
             
     if verbose: print(f"Considering {len(counts['bin_centers'])} Triangle Configurations ({triangle_type})")
-    bin_indices = ((counts['bin_centers'] - fc) // dk).astype(np.int64)
-
-    p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
+    bin_indices = jnp.array(((counts['bin_centers'] - fc) // dk),dtype=jnp.int64)
     
     if compute_counts:
-        Pk, Bk = _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose)
+        Pk, Bk = _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
         counts['counts_P'] = Pk * grid**3
         counts['counts_B'] = Bk * grid**6
         np.save(file_name,counts)
@@ -245,7 +247,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type,MAS,verbose=False):
     
     compute_counts=False
     
-    Pk, Bk = _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,p_MAS,bin_indices,compute_counts,verbose)
+    Pk, Bk = _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
         
     result = np.ones((len(counts['bin_centers']),8))
     result[:,:3] = counts['bin_centers']
