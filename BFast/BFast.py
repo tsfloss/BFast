@@ -25,8 +25,8 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,ve
 
         if MAS:
             p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-            fac = jnp.pi * kmesh/kF/grid
-            mas_fac = (fac/jnp.sin(fac))**p_MAS
+            mas_fac = jnp.pi * kmesh/kF/grid
+            mas_fac = (mas_fac/jnp.sin(mas_fac))**p_MAS
             mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
             mas_fac = jnp.prod(mas_fac,0)
             map_fft *= mas_fac
@@ -132,7 +132,7 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose
     
     kx = 2*jnp.pi * jnp.fft.fftfreq(grid,BoxSize/grid)
     kz = 2*jnp.pi * jnp.fft.rfftfreq(grid,BoxSize/grid)
-    kmesh = jnp.array(jnp.meshgrid(kx,kx,kz,indexing='ij'),dtype=jnp.float64)
+    kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij',sparse=False)
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
 
     bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
@@ -144,14 +144,10 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose
     if compute_counts:
         map_fft = jnp.array(jnp.ones_like(map_fft),dtype=jnp.complex64)
         
-    if MAS:
+    elif MAS:
         p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         for i in jnp.arange(3):
-            fac = jnp.pi * kmesh[i]/kF/grid
-            mas_fac = (fac/jnp.sin(fac))**p_MAS
-            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex64)
-            map_fft *= mas_fac
-        del mas_fac
+            map_fft *= jnp.sinc(kmesh[i]/kF/grid)**-p_MAS
 
     del kmesh
 

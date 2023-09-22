@@ -13,7 +13,7 @@ setup(
     version = "0.0.1",
     author = "Thomas Flöss",
     author_email = "tsfloss@gmail.com",
-    description = ("A fast GPU based bispectrum estimator implemented using TensorFlow"),
+    description = ("A fast GPU based bispectrum estimator implemented using jax),
     license = "MIT",
     url = "https://github.com/tsfloss/BFast",
     packages=['BFast'],
