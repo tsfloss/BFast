@@ -151,20 +151,20 @@ def _Bk_TF(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose
 
     del kmesh
 
-    @scan_tqdm(Nbins)
     def _P(carry,i):
         return carry, jnp.sum(jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[i])*(kgrid < kF*bin_upper[i])),dtype=jnp.float64)**2.)
 
+    if verbose: _P = scan_tqdm(Nbins)(_P)
     _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
     
-    @scan_tqdm(bin_indices.shape[0])
     def _B(carry,i):
         bin_index = bin_indices[i]
         field1 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[0]])*(kgrid < kF*bin_upper[bin_index[0]])),dtype=jnp.float32)
         field2 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[1]])*(kgrid < kF*bin_upper[bin_index[1]])),dtype=jnp.float32)
         field3 = jnp.array(jnp.fft.irfftn(map_fft*(kgrid >= kF*bin_lower[bin_index[2]])*(kgrid < kF*bin_upper[bin_index[2]])),dtype=jnp.float32)
         return carry, jnp.sum(field1*field2*field3)   
-        
+
+    if verbose: _B = scan_tqdm(bin_indices.shape[0])(_B)
     _, Bk = jax.lax.scan(f=_B,init=0.,xs=jnp.arange(bin_indices.shape[0]))
 
     return Pk, Bk
