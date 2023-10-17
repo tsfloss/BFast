@@ -49,6 +49,10 @@ def Bk_fast(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,verbose=False
 
     Parameters:
     -----------
+    delta: array
+        Real field to compute bispectrum of
+    BoxSize:
+        Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
     fc: float
         Center of first bin in units of the fundamental mode.
     dk: float
@@ -175,6 +179,10 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,verbose=False):
 
     Parameters:
     -----------
+    delta: array
+        Real field to compute bispectrum of
+    BoxSize:
+        Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
     fc: float
         Center of first bin in units of the fundamental mode.
     dk: float
