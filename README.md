@@ -1,12 +1,331 @@
 # BFast
-A fast GPU based bispectrum estimator implemented using TensorFlow.
+A fast GPU based bispectrum estimator implemented with jax.
 
-It contains a fast, memory heavy algorithm Bk_fast, that can compute the bispectrum of 2276 triangle configurations in a 256^3 box in a bit more than a second on an Nvidia A100 40GB GPU, taking close to 8GB of memory. This algorithm is too memory heavy for higher resolution grids.
+It contains a fast, more memory heavy algorithm, that can compute the bispectrum of 2276 triangle configurations in a 256^3 box in less than a second on a V100/A100, using float32 precision (~2x for float64).
 
-There is also a slower, memory efficient algorithm for higher resolution grids. It computes the same 2276 triangle configurations in a 512^3 box in around 45 seconds using only 6 GB of GPU memory, whereas one CPU core would take around 5 minutes (using the fast algorithm on CPU as implemented in https://github.com/tsfloss/DensityFieldTools, without the precomputation of triangle counts).
+There is also a slower, memory efficient algorithm for higher resolution grids or more bins. It computes the same 2276 triangle configurations in a 512^3 box in around 35 (70) seconds on an A100 (V100), using float32 precision (~2x for float64).
 
 Requirements:
 - numpy
-- tensorflow
-- tqdm
+- jax
+- scan_tqdm
 - matplotlib (for example notebook)
+
+# Demonstration
+
+
+```python
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
+import BFast
+import numpy as np
+import matplotlib.pyplot as plt
+import jax
+jax.device_count()
+```
+
+
+
+
+    1
+
+
+
+
+```python
+BoxSize = 1000.
+kF = 2*np.pi/BoxSize
+grid = 256
+```
+
+
+```python
+df = np.load(f"df_m_256_PCS_z=0.npy")
+```
+
+
+```python
+help(BFast.Bk)
+```
+
+    Help on function Bk in module BFast.BFast:
+    
+    Bk(delta, BoxSize, fc, dk, Nbins, triangle_type='All', open_triangles=True, MAS=None, fast=True, precision='float32', file_path='./', verbose=False)
+        Computes binned bispectrum of field for given binning and triangles
+        
+        Parameters:
+        -----------
+        delta: array
+            Real field to compute bispectrum of
+        BoxSize:
+            Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
+        fc: float
+            Center of first bin in units of the fundamental mode.
+        dk: float
+            Width of the bin in units of the fundamental mode.
+        Nbins: int
+            Total number of momentum bins such that bins are given by [(fc + i)±dk/2 for i in range(Nbins)].
+        triangle_type: str, optional (default='All')
+            Type of triangles to include in the bispectrum calculation. 
+            Options: 'All' (include all shapes of triangles),
+                     'Squeezed' (include only triangles k_1 > k_2 = k_3), 
+                     'Equilateral' (include only triangles k_1 = k_2 = k_3).
+        open_triangles: bool, optional (default=True)
+            If True, includes triangles of which the bin centers do not form a closed triangles, but still form closed triangles somewhere within the bins (see Biagetti '21)
+        MAS: str, optional (default=None)
+            Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
+        fast: bool, optional (default=True)
+            If True, uses the fast algorithm that precomputes all bins. If False, use the slower algorithm for larger grid-size and/or Nbins.
+        precision: str, optional (default='float32')
+            Precision of the computation, affects the speed of the algorithm
+        file_path: str, optional (default='./')
+            Where to find/save counts file
+        verbose: bool, optional (default=False)
+            If True, print progress statements (only for slow algorithm)
+        
+        Returns:
+        --------
+        result: numpy.ndarray
+            An array of shape (len(counts['bin_centers']),8) containing the bispectrum and related information.
+            The columns contain: {bin centers in units of kF, P(k1), P(k2), P(k3), B(k1,k2,k3), number of triangles in bin}
+            
+        Notes:
+        --------
+        The first time the computation for a certain binning is being done, 
+        this function will first compute the necessary mode counts for power spectrum and bispectrum normalization. 
+        This is saved in a file in the local directory for later use, when measuring from other density fields but with the same binning.
+    
+
+
+
+```python
+%time Bks_32 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float32',verbose=True)
+%time Bks_64 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float64',verbose=True)
+```
+
+    No counts file found, computing this first!
+    Considering 2276 Triangle Configurations (All)
+    Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
+    CPU times: user 4.5 s, sys: 941 ms, total: 5.44 s
+    Wall time: 8.59 s
+    No counts file found, computing this first!
+    Considering 2276 Triangle Configurations (All)
+    Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
+    CPU times: user 2.29 s, sys: 855 ms, total: 3.14 s
+    Wall time: 4.05 s
+
+
+
+```python
+plt.semilogy(Bks_32[:,-2])
+```
+
+
+
+
+    [<matplotlib.lines.Line2D at 0x7f69c40a9ba0>]
+
+
+
+
+    
+![png](example_notebook_files/example_notebook_7_1.png)
+    
+
+
+## The first time jax compiles certain parts and compute triangle counts, a next call is blazing fast:
+
+
+```python
+%time Bks_32 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float32',verbose=True)
+%time Bks_64 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float64',verbose=True)
+```
+
+    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
+    Considering 2276 Triangle Configurations (All)
+    CPU times: user 655 ms, sys: 189 ms, total: 844 ms
+    Wall time: 714 ms
+    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
+    Considering 2276 Triangle Configurations (All)
+    CPU times: user 804 ms, sys: 352 ms, total: 1.16 s
+    Wall time: 1.03 s
+
+
+## Float32 precision is very accurate but twice as fast:
+
+
+```python
+plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
+```
+
+
+
+
+    [<matplotlib.lines.Line2D at 0x7f69bc29aa10>]
+
+
+
+
+    
+![png](example_notebook_files/example_notebook_11_1.png)
+    
+
+
+## There is also a slower but more memory friendly algorithm for larger boxes or more bins
+
+
+```python
+%time Bks_32_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float32',verbose=True)
+%time Bks_64_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float64',verbose=True)
+```
+
+    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
+    Considering 2276 Triangle Configurations (All)
+
+
+
+      0%|          | 0/27 [00:00<?, ?it/s]
+
+
+
+      0%|          | 0/2276 [00:00<?, ?it/s]
+
+
+    CPU times: user 5.99 s, sys: 79.2 ms, total: 6.07 s
+    Wall time: 6.21 s
+    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
+    Considering 2276 Triangle Configurations (All)
+
+
+
+      0%|          | 0/27 [00:00<?, ?it/s]
+
+
+
+      0%|          | 0/2276 [00:00<?, ?it/s]
+
+
+    CPU times: user 10.5 s, sys: 80.7 ms, total: 10.6 s
+    Wall time: 10.5 s
+
+
+## Again, Float32 precision is very accurate but twice as fast:
+
+
+```python
+plt.semilogy(np.abs((Bks_32_slow[:,-2]-Bks_64_slow[:,-2])/Bks_64_slow[:,-2]))
+```
+
+
+
+
+    [<matplotlib.lines.Line2D at 0x7f6994605750>]
+
+
+
+
+    
+![png](example_notebook_files/example_notebook_15_1.png)
+    
+
+
+## There is also a power spectrum method with a binning of kF:
+
+
+```python
+help(BFast.Pk)
+```
+
+    Help on function Pk in module BFast.BFast:
+    
+    Pk(delta, BoxSize, MAS=None, left_inclusive=True, precision='float32')
+        Computes binned bispectrum of field for given binning and triangles
+        
+        Parameters:
+        -----------
+        delta: array
+            Real field to compute bispectrum of
+        BoxSize:
+            Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
+        MAS: str, optional (default=None)
+            Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
+        left_inclusive: bool, optional (default=True)
+            If True, uses left-inclusive bins. If False, uses right-inclusive bins instead.
+        
+        Returns:
+        --------
+        result: numpy.ndarray
+            An array of shape (Nbins,3) containing the power spectrum and related information.
+            The columns contain: {mean k of the bin, P(k1), number of modes in bin}
+    
+
+
+
+```python
+Pks_32_left = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=True,precision='float32')
+Pks_32_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float32')
+Pks_64_left = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=True,precision='float64')
+Pks_64_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float64')
+
+plt.loglog(Pks_32_left[:,0],Pks_32_left[:,1])
+plt.loglog(Pks_32_right[:,0],Pks_32_right[:,1])
+```
+
+
+
+
+    [<matplotlib.lines.Line2D at 0x7f6994593160>]
+
+
+
+
+    
+![png](example_notebook_files/example_notebook_18_1.png)
+    
+
+
+
+```python
+%time Pks_32_left = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=True,precision='float32')
+%time Pks_32_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float32')
+%time Pks_64_left = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=True,precision='float64')
+%time Pks_64_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float64')
+```
+
+    CPU times: user 352 ms, sys: 37.7 ms, total: 390 ms
+    Wall time: 314 ms
+    CPU times: user 347 ms, sys: 42.2 ms, total: 389 ms
+    Wall time: 352 ms
+    CPU times: user 279 ms, sys: 91 ms, total: 370 ms
+    Wall time: 360 ms
+    CPU times: user 281 ms, sys: 75 ms, total: 356 ms
+    Wall time: 382 ms
+
+
+## Float32 precision is very accurate, but the speed up is minimal/none in this case (on this grid size!)
+
+
+```python
+plt.loglog(Pks_64_left[:,0],np.abs((Pks_32_left[:,-2]-Pks_64_left[:,-2])/Pks_64_left[:,-2]))
+plt.show()
+plt.loglog(Pks_64_right[:,0],np.abs((Pks_32_right[:,-2]-Pks_64_right[:,-2])/Pks_64_right[:,-2]))
+plt.show()
+```
+
+
+    
+![png](example_notebook_files/example_notebook_21_0.png)
+    
+
+
+
+    
+![png](example_notebook_files/example_notebook_21_1.png)
+    
+
+
+
+```python
+
+```

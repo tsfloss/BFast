@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import jax
 from jax_tqdm import scan_tqdm
 
-def Pk(delta,BoxSize,MAS=None,left_inclusive=True):
+def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     """
     Computes binned bispectrum of field for given binning and triangles
 
@@ -36,6 +36,16 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True):
 
     kmax = jnp.array(kgrid.max(),jnp.int64)+1
 
+    if precision=='float32':
+        rtype = jnp.float32
+        ctype = jnp.complex64
+    elif precision=='float64':
+        rtype = jnp.float64
+        ctype = jnp.complex128
+
+    delta = jnp.array(delta,dtype=rtype)
+    delta = jnp.fft.fftn(delta)
+                      
     if left_inclusive:
         bin_lower = jnp.arange(1,kmax,dtype=jnp.float64)
         
@@ -50,26 +60,21 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True):
             return fft, jnp.sum(jnp.real(binned_field)**2. + jnp.imag(binned_field)**2.)/2
 
     Nbins = bin_lower.shape[0]
-    
-    delta = jnp.array(jnp.fft.fftn(delta),dtype=jnp.complex128)
 
     if MAS:
         p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         for i in jnp.arange(3):
-            fac = jnp.pi * kmesh[i]/grid
-            mas_fac = (fac/jnp.sin(fac))**p_MAS
-            mas_fac = jnp.array(jnp.where(jnp.isnan(mas_fac),1.,mas_fac),dtype=jnp.complex128)
-            delta *= mas_fac
-        del mas_fac
+            delta *= jnp.sinc(kmesh[i]/grid)**(-p_MAS)
+
 
     del kmesh
     
     _, Pk = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
     
-    ones_fft = jnp.ones((grid,grid,grid),dtype=jnp.complex128)
+    ones_fft = jnp.ones_like(delta)
     _, counts = jax.lax.scan(f=_P,init=ones_fft,xs=jnp.arange(Nbins))
 
-    ks_fft = ones_fft * jnp.sqrt(kgrid)
+    ks_fft = jnp.array(ones_fft * jnp.sqrt(kgrid),dtype=ctype)
     _, k_means = jax.lax.scan(f=_P,init=ks_fft,xs=jnp.arange(Nbins))
     
     k_means = kF * k_means / counts
@@ -77,7 +82,7 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True):
     
     return jnp.array([k_means,Pk, counts]).T
 
-def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=False):
+def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=None,fast=True,precision='float32',file_path="./",verbose=False):
     """
     Computes binned bispectrum of field for given binning and triangles
 
@@ -98,12 +103,18 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
         Options: 'All' (include all shapes of triangles),
                  'Squeezed' (include only triangles k_1 > k_2 = k_3), 
                  'Equilateral' (include only triangles k_1 = k_2 = k_3).
+    open_triangles: bool, optional (default=True)
+        If True, includes triangles of which the bin centers do not form a closed triangles, but still form closed triangles somewhere within the bins (see Biagetti '21)
     MAS: str, optional (default=None)
         Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
     fast: bool, optional (default=True)
         If True, uses the fast algorithm that precomputes all bins. If False, use the slower algorithm for larger grid-size and/or Nbins.
+    precision: str, optional (default='float32')
+        Precision of the computation, affects the speed of the algorithm
+    file_path: str, optional (default='./')
+        Where to find/save counts file
     verbose: bool, optional (default=False)
-        If True, print progress statements.
+        If True, print progress statements (only for slow algorithm)
 
     Returns:
     --------
@@ -118,8 +129,8 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
     This is saved in a file in the local directory for later use, when measuring from other density fields but with the same binning.
     """
     grid = delta.shape[0]
-    file_name = f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{float(dk):.2f}kF_FirstCenter{float(fc):.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}.npy"
-
+    file_name = file_path + f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{float(dk):.2f}kF_FirstCenter{float(fc):.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}_OpenTriangles{open_triangles}_Precision{precision}.npy"
+    
     if os.path.exists(file_name):
         if verbose: print(f"Loading Counts from {file_name}")
         counts = np.load(file_name,allow_pickle=True).item()
@@ -134,8 +145,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
             counts['bin_centers'] = np.array([(i,j,l)\
                                               for i in fc+np.arange(0, (Nbins))*dk \
                                               for j in np.arange(fc, i+1, dk)\
-                                              for l in np.arange(fc, j+1, dk) if i<=j+l+dk]) 
-                                                #the +dk allows for open bins (Biagetti '21)
+                                              for l in np.arange(fc, j+1, dk) if i<=j+l+open_triangles*dk]) 
 
         elif triangle_type=='Squeezed':
             counts['bin_centers'] = np.array([(i,i,j)\
@@ -154,7 +164,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
         _Bk_fn = _Bk_jax
     
     if compute_counts:
-        Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
+        Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,precision,verbose)
         counts['counts_P'] = Pk * grid**3
         counts['counts_B'] = Bk * grid**6
         np.save(file_name,counts)
@@ -162,7 +172,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
     
     compute_counts=False
     
-    Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose)
+    Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,precision,verbose)
         
     result = np.ones((len(counts['bin_centers']),8))
     result[:,:3] = counts['bin_centers']
@@ -172,27 +182,34 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',MAS=None,fast=True,verbose=
     
     return result
 
-def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
+def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
     kx = jnp.fft.fftfreq(grid,1./grid)
     kz = jnp.fft.rfftfreq(grid,1./grid)
     kmesh = jnp.array(jnp.meshgrid(kx,kx,kz,indexing='ij'),dtype=jnp.float64)
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
+
+    if dtype=='float32':
+        rtype = jnp.float32
+        ctype = jnp.complex64
+    elif dtype=='float64':
+        rtype = jnp.float64
+        ctype = jnp.complex128
     
     bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
-    bools = jnp.array([(kgrid >= bin_lower[i])*(kgrid < bin_upper[i]) for i in jnp.arange(Nbins)],dtype=jnp.complex64)
+    bools = jnp.array([(kgrid >= bin_lower[i])*(kgrid < bin_upper[i]) for i in jnp.arange(Nbins)],dtype=ctype)
 
     if compute_counts:
         binned_delta = bools
     else:
-        delta = jnp.array(jnp.fft.rfftn(delta),dtype=jnp.complex64)
+        delta = jnp.fft.rfftn(jnp.array(delta,dtype=rtype))
 
         if MAS:
             p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-            delta *= jnp.array(jnp.sinc(kmesh/grid)**-p_MAS,dtype=jnp.complex64).prod(0)
+            delta *= (jnp.sinc(kmesh/grid)**(-p_MAS)).prod(0)
         
-        binned_delta = jnp.einsum("jkl,mjkl->mjkl",delta,bools)
+        binned_delta = jnp.einsum("jkl,mjkl->mjkl",jnp.array(delta,dtype=ctype),bools)
         
     del kmesh
     
@@ -203,40 +220,49 @@ def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,v
     
     return Pk, Bk
 
-def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
+def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
     kx = jnp.fft.fftfreq(grid,1./grid)
     kz = jnp.fft.rfftfreq(grid,1./grid)
     kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij')
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
 
+    if dtype=='float32':
+        rtype = jnp.float32
+        ctype = jnp.complex64
+    elif dtype=='float64':
+        rtype = jnp.float64
+        ctype = jnp.complex128
+    
     bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
     
     if compute_counts:
-        delta = jnp.ones((grid,grid,grid//2 + 1),dtype=jnp.complex64)
+        delta = jnp.ones((grid,grid,grid//2 + 1),dtype=ctype)
     else:
-        delta = delta = jnp.array(jnp.fft.rfftn(delta),dtype=jnp.complex64)
+        delta = jnp.fft.rfftn(jnp.array(delta,dtype=rtype))
         
         if MAS:
             p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
             for i in jnp.arange(3):
-                delta *= jnp.array(jnp.sinc(kmesh[i]/grid)**-p_MAS,dtype=jnp.complex64)
+                delta *= jnp.sinc(kmesh[i]/grid)**(-p_MAS)
 
     del kmesh
 
+    delta = jnp.array(delta,dtype=ctype)
+
     def _P(carry,i):
-        return carry, jnp.sum(jnp.array(jnp.fft.irfftn(delta*(kgrid >= bin_lower[i])*(kgrid < bin_upper[i])),dtype=jnp.float32)**2.)
+        return carry, jnp.sum(jnp.fft.irfftn(delta*(kgrid >= bin_lower[i])*(kgrid < bin_upper[i]))**2.)
 
     if verbose: _P = scan_tqdm(Nbins)(_P)
     _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
     
     def _B(carry,i):
         bin_index = bin_indices[i]
-        field1 = jnp.array(jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[0]])*(kgrid < bin_upper[bin_index[0]])),dtype=jnp.float32)
-        field2 = jnp.array(jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[1]])*(kgrid < bin_upper[bin_index[1]])),dtype=jnp.float32)
-        field3 = jnp.array(jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[2]])*(kgrid < bin_upper[bin_index[2]])),dtype=jnp.float32)
-        return carry, jnp.sum(field1*field2*field3)   
+        field1 = jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[0]])*(kgrid < bin_upper[bin_index[0]]))
+        field2 = jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[1]])*(kgrid < bin_upper[bin_index[1]]))
+        field3 = jnp.fft.irfftn(delta*(kgrid >= bin_lower[bin_index[2]])*(kgrid < bin_upper[bin_index[2]]))
+        return carry, jnp.sum(field1*field2*field3)
 
     if verbose: _B = scan_tqdm(bin_indices.shape[0])(_B)
     _, Bk = jax.lax.scan(f=_B,init=0.,xs=jnp.arange(bin_indices.shape[0]))
