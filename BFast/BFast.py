@@ -128,8 +128,10 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
     this function will first compute the necessary mode counts for power spectrum and bispectrum normalization. 
     This is saved in a file in the local directory for later use, when measuring from other density fields but with the same binning.
     """
+    fc = float(fc)
+    dk = float(dk)
     grid = delta.shape[0]
-    file_name = file_path + f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{float(dk):.2f}kF_FirstCenter{float(fc):.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}_OpenTriangles{open_triangles}_Precision{precision}.npy"
+    file_name = file_path + f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{dk:.2f}kF_FirstCenter{fc:.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}_OpenTriangles{open_triangles}_Precision{precision}.npy"
     
     if os.path.exists(file_name):
         if verbose: print(f"Loading Counts from {file_name}")
