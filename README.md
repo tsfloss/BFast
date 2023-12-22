@@ -11,6 +11,9 @@ Requirements:
 - scan_tqdm
 - matplotlib (for example notebook)
 
+Installation:
+clone the repository and cd into the directory then install using 'pip install .' (optionally add the -e flag to install in developer mode)
+
 # Demonstration
 
 
