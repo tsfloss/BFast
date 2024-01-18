@@ -11,9 +11,6 @@ Requirements:
 - scan_tqdm
 - matplotlib (for example notebook)
 
-Installation:
-clone the repository and cd into the directory then install using 'pip install .' (optionally add the -e flag to install in developer mode)
-
 # Demonstration
 
 
@@ -25,6 +22,7 @@ import BFast
 import numpy as np
 import matplotlib.pyplot as plt
 import jax
+import jax.numpy as jnp
 jax.device_count()
 ```
 
@@ -45,7 +43,15 @@ grid = 256
 
 ```python
 df = np.load(f"df_m_256_PCS_z=0.npy")
+df.dtype
 ```
+
+
+
+
+    dtype('float32')
+
+
 
 
 ```python
@@ -72,7 +78,7 @@ help(BFast.Bk)
         triangle_type: str, optional (default='All')
             Type of triangles to include in the bispectrum calculation. 
             Options: 'All' (include all shapes of triangles),
-                     'Squeezed' (include only triangles k_1 > k_2 = k_3), 
+                     'Squeezed' (include only triangles k_1 < k_2 = k_3), 
                      'Equilateral' (include only triangles k_1 = k_2 = k_3).
         open_triangles: bool, optional (default=True)
             If True, includes triangles of which the bin centers do not form a closed triangles, but still form closed triangles somewhere within the bins (see Biagetti '21)
@@ -108,15 +114,15 @@ help(BFast.Bk)
 ```
 
     No counts file found, computing this first!
-    Considering 2276 Triangle Configurations (All)
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
     Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    CPU times: user 4.5 s, sys: 941 ms, total: 5.44 s
-    Wall time: 8.59 s
+    CPU times: user 3.77 s, sys: 704 ms, total: 4.47 s
+    Wall time: 6.93 s
     No counts file found, computing this first!
-    Considering 2276 Triangle Configurations (All)
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
     Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    CPU times: user 2.29 s, sys: 855 ms, total: 3.14 s
-    Wall time: 4.05 s
+    CPU times: user 1.99 s, sys: 725 ms, total: 2.72 s
+    Wall time: 3.4 s
 
 
 
@@ -127,7 +133,7 @@ plt.semilogy(Bks_32[:,-2])
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f69c40a9ba0>]
+    [<matplotlib.lines.Line2D at 0x7f383421b0d0>]
 
 
 
@@ -146,13 +152,13 @@ plt.semilogy(Bks_32[:,-2])
 ```
 
     Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    Considering 2276 Triangle Configurations (All)
-    CPU times: user 655 ms, sys: 189 ms, total: 844 ms
-    Wall time: 714 ms
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
+    CPU times: user 571 ms, sys: 173 ms, total: 745 ms
+    Wall time: 636 ms
     Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    Considering 2276 Triangle Configurations (All)
-    CPU times: user 804 ms, sys: 352 ms, total: 1.16 s
-    Wall time: 1.03 s
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
+    CPU times: user 725 ms, sys: 322 ms, total: 1.05 s
+    Wall time: 942 ms
 
 
 ## Float32 precision is very accurate but twice as fast:
@@ -165,7 +171,7 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f69bc29aa10>]
+    [<matplotlib.lines.Line2D at 0x7f382c130070>]
 
 
 
@@ -184,7 +190,7 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
 ```
 
     Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    Considering 2276 Triangle Configurations (All)
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
 
 
 
@@ -195,10 +201,10 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
       0%|          | 0/2276 [00:00<?, ?it/s]
 
 
-    CPU times: user 5.99 s, sys: 79.2 ms, total: 6.07 s
-    Wall time: 6.21 s
+    CPU times: user 3.49 s, sys: 93 ms, total: 3.58 s
+    Wall time: 3.66 s
     Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    Considering 2276 Triangle Configurations (All)
+    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
 
 
 
@@ -209,8 +215,8 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
       0%|          | 0/2276 [00:00<?, ?it/s]
 
 
-    CPU times: user 10.5 s, sys: 80.7 ms, total: 10.6 s
-    Wall time: 10.5 s
+    CPU times: user 5.17 s, sys: 77.2 ms, total: 5.25 s
+    Wall time: 5.06 s
 
 
 ## Again, Float32 precision is very accurate but twice as fast:
@@ -223,7 +229,7 @@ plt.semilogy(np.abs((Bks_32_slow[:,-2]-Bks_64_slow[:,-2])/Bks_64_slow[:,-2]))
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f6994605750>]
+    [<matplotlib.lines.Line2D at 0x7f38046b17b0>]
 
 
 
@@ -248,7 +254,7 @@ help(BFast.Pk)
         Parameters:
         -----------
         delta: array
-            Real field to compute bispectrum of
+            Real field to compute powerspectrum of
         BoxSize:
             Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
         MAS: str, optional (default=None)
@@ -278,7 +284,7 @@ plt.loglog(Pks_32_right[:,0],Pks_32_right[:,1])
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f6994593160>]
+    [<matplotlib.lines.Line2D at 0x7f38044d2b60>]
 
 
 
@@ -296,14 +302,14 @@ plt.loglog(Pks_32_right[:,0],Pks_32_right[:,1])
 %time Pks_64_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float64')
 ```
 
-    CPU times: user 352 ms, sys: 37.7 ms, total: 390 ms
-    Wall time: 314 ms
-    CPU times: user 347 ms, sys: 42.2 ms, total: 389 ms
-    Wall time: 352 ms
-    CPU times: user 279 ms, sys: 91 ms, total: 370 ms
-    Wall time: 360 ms
-    CPU times: user 281 ms, sys: 75 ms, total: 356 ms
-    Wall time: 382 ms
+    CPU times: user 381 ms, sys: 49.7 ms, total: 431 ms
+    Wall time: 349 ms
+    CPU times: user 386 ms, sys: 44.1 ms, total: 430 ms
+    Wall time: 356 ms
+    CPU times: user 443 ms, sys: 60.1 ms, total: 503 ms
+    Wall time: 419 ms
+    CPU times: user 435 ms, sys: 55.5 ms, total: 491 ms
+    Wall time: 416 ms
 
 
 ## Float32 precision is very accurate, but the speed up is minimal/none in this case (on this grid size!)
@@ -327,8 +333,3 @@ plt.show()
 ![png](example_notebook_files/example_notebook_21_1.png)
     
 
-
-
-```python
-
-```
