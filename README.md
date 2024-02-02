@@ -8,7 +8,7 @@ There is also a slower, memory efficient algorithm for higher resolution grids o
 Requirements:
 - numpy
 - jax
-- scan_tqdm
+- jax-tqdm
 - matplotlib (for example notebook)
 
 # Demonstration

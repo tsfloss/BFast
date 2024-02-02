@@ -7,14 +7,14 @@ from jax_tqdm import scan_tqdm
 
 def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     """
-    Computes binned bispectrum of field for given binning and triangles
+    Computes binned powerspectrum of field
 
     Parameters:
     -----------
     delta: array
         Real field to compute powerspectrum of
     BoxSize:
-        Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3 and bispectrum has units (Mpc/h)^6
+        Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3
     MAS: str, optional (default=None)
         Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
     left_inclusive: bool, optional (default=True)
@@ -24,17 +24,17 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     --------
     result: numpy.ndarray
         An array of shape (Nbins,3) containing the power spectrum and related information.
-        The columns contain: {mean k of the bin, P(k1), number of modes in bin}
+        The columns contain: {mean k of the bin, P(k), number of modes in bin}
     """
     
     grid = delta.shape[0]
     kF = 2*jnp.pi/BoxSize
     
-    kx = jnp.fft.fftfreq(grid,1./grid)
-    kmesh = jnp.asarray(jnp.meshgrid(kx,kx,kx,indexing='ij'),dtype=jnp.float64)
-    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)   
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
+    kmesh = jnp.meshgrid(kx,kx,kx,indexing='ij',sparse=True)
+    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
 
-    kmax = jnp.array(kgrid.max(),jnp.int64)+1
+    kmax = jnp.array(kgrid.max(),jnp.int64)
 
     if precision=='float32':
         rtype = jnp.float32
@@ -49,50 +49,53 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     if left_inclusive:
         bin_lower = jnp.arange(1,kmax,dtype=jnp.float64)
         
-        def _P(fft,i):
-            binned_field = fft*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
-            return fft, jnp.sum(jnp.real(binned_field)**2. + jnp.imag(binned_field)**2.)/2
+        def _P(fft2,i):
+            binned_field = fft2*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
+            return fft2, 0.5*jnp.sum(binned_field)
     else:
         bin_lower = jnp.arange(0,kmax,dtype=jnp.float64)
         
-        def _P(fft,i):
-            binned_field = fft*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
-            return fft, jnp.sum(jnp.real(binned_field)**2. + jnp.imag(binned_field)**2.)/2
+        def _P(fft2,i):
+            binned_field = fft2*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
+            return fft2, 0.5*jnp.sum(binned_field)
 
     Nbins = bin_lower.shape[0]
 
+
     if MAS:
         p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-        for i in jnp.arange(3):
+        for i in range(3):
             delta *= jnp.sinc(kmesh[i]/grid)**(-p_MAS)
-
-
+        delta = delta.astype(ctype)
+        
     del kmesh
     
-    _, Pk = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
-    
-    ones_fft = jnp.ones_like(delta)
-    _, counts = jax.lax.scan(f=_P,init=ones_fft,xs=jnp.arange(Nbins))
+    delta = jnp.abs(delta)**2.
+    delta, Pk = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
 
-    ks_fft = jnp.sqrt(kgrid)
-    _, k_means = jax.lax.scan(f=_P,init=ks_fft,xs=jnp.arange(Nbins))
+    delta = jnp.ones_like(delta)
+    delta, counts = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
+
+    delta, k_means = jax.lax.scan(f=_P,init=kgrid,xs=jnp.arange(Nbins))
     
     k_means = kF * k_means / counts
     Pk = Pk / counts * BoxSize**3 / grid**6
     
-    return np.array([k_means,Pk, counts]).T
+    return np.array([k_means,Pk, counts],dtype=rtype).T
 
-def xPk(delta1,delta2,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
+def xPk(delta1,delta2,BoxSize,MAS=[None,None],left_inclusive=True,precision='float32'):
     """
-    Computes binned bispectrum of field for given binning and triangles
+    Computes binned cross-powerspectrum of two fields
 
     Parameters:
     -----------
-    delta1 and delta2: arrays
-        Real field to compute powerspectra of
+    delta1: array
+        Real field to compute powerspectrum of
+    delta2: array
+        Real field to compute powerspectrum of
     BoxSize:
         Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3
-    MAS: str, optional (default=None)
+    MAS: list of [str,str], optional (default=[None,None])
         Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
     left_inclusive: bool, optional (default=True)
         If True, uses left-inclusive bins. If False, uses right-inclusive bins instead.
@@ -100,18 +103,19 @@ def xPk(delta1,delta2,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     Returns:
     --------
     result: numpy.ndarray
-        An array of shape (Nbins,3) containing the power spectrum and related information.
-        The columns contain: {mean k of the bin, P(k1), number of modes in bin}
+        An array of shape (Nbins,6) containing the power spectrum and related information.
+        The columns contain: {mean k of the bin, powerspectrum of delta1, powerspectrum of delta2, cross-powerspectrum, cross-correlation, number of modes in bin}
     """
-    assert delta1.shape == delta2.shape
+    assert delta1.shape == delta2.shape, "shapes of fields mismatch"
+    assert len(MAS) == 2, "supply valid MAS values for the two fields, e.g. [None,None] or ['CIC','CIC']"
     grid = delta1.shape[0]
     kF = 2*jnp.pi/BoxSize
     
-    kx = jnp.fft.fftfreq(grid,1./grid)
-    kmesh = jnp.asarray(jnp.meshgrid(kx,kx,kx,indexing='ij'),dtype=jnp.float64)
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
+    kmesh = jnp.meshgrid(kx,kx,kx,indexing='ij',sparse=True)
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)   
 
-    kmax = jnp.array(kgrid.max(),jnp.int64)#+1
+    kmax = jnp.array(kgrid.max(),jnp.int64)
 
     if precision=='float32':
         rtype = jnp.float32
@@ -129,46 +133,53 @@ def xPk(delta1,delta2,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
     if left_inclusive:
         bin_lower = jnp.arange(1,kmax,dtype=jnp.float64)
         
-        def _P(fft1,i,fft2):
-            binned_field1 = fft1*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
-            binned_field2 = fft2*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
-            return fft1, jnp.real(jnp.sum(binned_field1*jnp.conj(binned_field2)))
+        def _P(fft2,i):
+            binned_field = fft2*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
+            return fft2, 0.5*jnp.sum(binned_field)
     else:
         bin_lower = jnp.arange(0,kmax,dtype=jnp.float64)
         
-        def _P(fft1,i,fft2):
-            binned_field1 = fft1*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
-            binned_field2 = fft2*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
-            return fft1, jnp.real(jnp.sum(binned_field1*jnp.conj(binned_field2)))
+        def _P(fft2,i):
+            binned_field = fft2*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
+            return fft2, 0.5*jnp.sum(binned_field)
 
     Nbins = bin_lower.shape[0]
 
-    if MAS:
-        p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-        for i in jnp.arange(3):
-            mas_fac = jnp.sinc(kmesh[i]/grid)**(-p_MAS)
-            delta1 *= mas_fac
-            delta2 *= mas_fac
+    if MAS[0] or MAS[1]:
+        
+        for i in range(3):
+            mas_fac = jnp.sinc(kmesh[i]/grid)
 
-    del kmesh, fac
+        if MAS[0]:
+            p_MAS_1 = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS[0]]
+            delta1 *= mas_fac**(-p_MAS_1)
+            delta1 = delta1.astype(ctype)
+        if MAS[1]:
+            p_MAS_2 = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS[1]]
+            delta2 *= mas_fac**(-p_MAS_2)
+            delta2 = delta2.astype(ctype)
+
+        del mas_fac
+
+    del kmesh
     
-    _, Pk1 = jax.lax.scan(f=lambda fft1,i: _P(fft1,i,delta1),init=delta1,xs=jnp.arange(Nbins))
-    _, Pk2 = jax.lax.scan(f=lambda fft1,i: _P(fft1,i,delta2),init=delta2,xs=jnp.arange(Nbins))
-    _, Pkx = jax.lax.scan(f=lambda fft1,i: _P(fft1,i,delta2),init=delta1,xs=jnp.arange(Nbins))
+    delta = jnp.abs(delta1)**2.
+    delta, Pk1 = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
+    delta = jnp.abs(delta2)**2.
+    delta, Pk2 = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
+    delta = 0.5*(delta1 * delta2.conj() + delta2 * delta1.conj()).real
+    delta, Pkx = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
 
-    ones_fft = jnp.ones_like(delta1)
-    _, counts = jax.lax.scan(f=lambda fft1,i: _P(fft1,i,ones_fft),init=ones_fft,xs=jnp.arange(Nbins))
+    _, counts = jax.lax.scan(f=_P,init=jnp.ones_like(delta),xs=jnp.arange(Nbins))
 
-    ks_fft = jnp.sqrt(kgrid)
-    _, k_means = jax.lax.scan(f=lambda fft1,i: _P(fft1,i,ks_fft),init=ks_fft,xs=jnp.arange(Nbins))
+    _, k_means = jax.lax.scan(f=_P,init=kgrid,xs=jnp.arange(Nbins))
     
     k_means = kF * k_means / counts
     Pk1 = Pk1 / counts * BoxSize**3 / grid**6
     Pk2 = Pk2 / counts * BoxSize**3 / grid**6
     Pkx = Pkx / counts * BoxSize**3 / grid**6
     Ck = Pkx/jnp.sqrt(Pk1*Pk2)
-    
-    return np.array([k_means,Pk1, Pk2, Pkx, Ck, counts]).T
+    return np.array([k_means,Pk1, Pk2, Pkx, Ck, counts],dtype=rtype).T
 
 def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=None,fast=True,precision='float32',file_path="./",verbose=False):
     """
@@ -200,7 +211,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
     precision: str, optional (default='float32')
         Precision of the computation, affects the speed of the algorithm
     file_path: str, optional (default='./')
-        Where to find/save counts file
+        Where to find/save counts file, if file_path=None no file will be used
     verbose: bool, optional (default=False)
         If True, print progress statements (only for slow algorithm)
 
@@ -221,15 +232,17 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
     grid = delta.shape[0]
     kF = 2*jnp.pi/BoxSize
     kmax = (fc + dk * (Nbins-1) + dk/2)*kF
+
+    compute_counts=True
     
-    file_name = file_path + f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{dk:.2f}kF_FirstCenter{fc:.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}_OpenTriangles{open_triangles}_Precision{precision}.npy"
+    if file_path:
+        file_name = file_path + f"BFast_BkCounts_Grid{int(grid)}_BoxSize{float(BoxSize):.2f}_BinSize{dk:.2f}kF_FirstCenter{fc:.2f}kF_NumBins{int(Nbins)}_TriangleType{triangle_type}_OpenTriangles{open_triangles}_Precision{precision}.npy"
     
-    if os.path.exists(file_name):
-        if verbose: print(f"Loading Counts from {file_name}")
-        counts = np.load(file_name,allow_pickle=True).item()
-        compute_counts=False
-    else:
-        compute_counts=True
+        if os.path.exists(file_name):
+            if verbose: print(f"Loading Counts from {file_name}")
+            counts = np.load(file_name,allow_pickle=True).item()
+            compute_counts=False
+
     
     if compute_counts:
         if verbose: print("No counts file found, computing this first!")
@@ -260,8 +273,10 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
         Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,precision,verbose)
         counts['counts_P'] = Pk * grid**3
         counts['counts_B'] = Bk * grid**6
-        np.save(file_name,counts)
-        print(f"Saved Triangle Counts to {file_name}")
+
+        if file_path:
+            np.save(file_name,counts)
+            print(f"Saved Triangle Counts to {file_name}")
     
     compute_counts=False
     
@@ -276,8 +291,8 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
     return result
 
 def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
-    kx = jnp.fft.fftfreq(grid,1./grid)
-    kz = jnp.fft.rfftfreq(grid,1./grid)
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
+    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=jnp.float64)
     kmesh = jnp.asarray(jnp.meshgrid(kx,kx,kz,indexing='ij'))
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
 
@@ -315,9 +330,9 @@ def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,d
     return Pk, Bk
 
 def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
-    kx = jnp.fft.fftfreq(grid,1./grid)
-    kz = jnp.fft.rfftfreq(grid,1./grid)
-    kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij')
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
+    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=jnp.float64)
+    kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij',sparse=True)
     kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
 
     if dtype=='float32':
