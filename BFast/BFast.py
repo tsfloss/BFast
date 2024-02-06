@@ -2,7 +2,6 @@ import os
 import numpy as np
 import tensorflow as tf
 from tqdm.auto import tqdm
-from numba import njit
 
 def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,verbose):
     kF = 2*np.pi/BoxSize
@@ -20,16 +19,17 @@ def _Bk_TF_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,ve
     if compute_counts:
         map_fft = bools
     else:
-        map_fft = tf.expand_dims(tf.signal.rfft3d(delta),axis=0)
+        map_fft = tf.cast(tf.expand_dims(tf.signal.rfft3d(delta),axis=0),dtype=tf.complex128)
 
         if MAS:
             p = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
             fac = np.pi * kmesh/kF/grid
             mas_fac = (fac/tf.math.sin(fac))**p
-            mas_fac = tf.cast(tf.where(tf.math.is_nan(mas_fac),1.,mas_fac),dtype=tf.complex64)
-            mas_fac = tf.reduce_prod(mas_fac,0)
+            mas_fac = tf.where(tf.math.is_nan(mas_fac),1.,mas_fac)
+            mas_fac = tf.cast(tf.reduce_prod(mas_fac,0),dtype=tf.complex128)
             map_fft *= mas_fac
-        
+    
+    map_fft = tf.cast(map_fft,dtype=tf.complex64)
     masked_maps_fft = tf.einsum("ijkl,mjkl->mjkl",map_fft,bools)
     masked_maps = tf.signal.irfft3d(masked_maps_fft)
     
@@ -200,11 +200,11 @@ def Pk(delta,BoxSize,MAS=None):
     bin_upper = bin_lower+1.
     Nbins = bin_lower.shape[0]
 
-    map_fft = tf.ones((grid,grid,grid),dtype=tf.complex128)
+    map_fft = tf.ones((grid,grid,grid),dtype=tf.complex64)
     
     counts = []
     for i in range(Nbins):
-        bool = tf.cast(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),dtype=tf.complex128)
+        bool = tf.cast(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),dtype=tf.complex64)
         binned_field = bool * map_fft
         counts.append(tf.math.real(tf.reduce_sum(binned_field*tf.math.conj(binned_field))))
     counts = tf.stack(counts)
@@ -218,11 +218,13 @@ def Pk(delta,BoxSize,MAS=None):
         mas_fac = tf.where(tf.math.is_nan(mas_fac),1.,mas_fac)
         mas_fac = tf.cast(mas_fac,dtype=tf.complex128)
         mas_fac = tf.reduce_prod(mas_fac,0)
-        map_fft *= mas_fac  
+        map_fft *= mas_fac
+
+    map_fft = tf.cast(map_fft,tf.complex64)
     
     Pk = []
     for i in range(Nbins):
-        bool = tf.cast(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),dtype=tf.complex128)
+        bool = tf.cast(tf.math.logical_and(kgrid >= kF*bin_lower[i],kgrid < kF*bin_upper[i]),dtype=tf.complex64)
         binned_field = bool * map_fft
         Pk.append(tf.math.real(tf.reduce_sum(binned_field*tf.math.conj(binned_field))))
 
