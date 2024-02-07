@@ -279,7 +279,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
             print(f"Saved Triangle Counts to {file_name}")
     
     compute_counts=False
-    
+
     Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,precision,verbose)
         
     result = np.ones((len(counts['bin_centers']),8))
