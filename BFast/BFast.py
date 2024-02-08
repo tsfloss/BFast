@@ -262,7 +262,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
                                               for i in fc+np.arange(0,Nbins)*dk])
             
     if verbose: print(f"Considering {len(counts['bin_centers'])} Triangle Configurations ({triangle_type}), with kmax = {kmax:.4f}")
-    bin_indices = jnp.array(((counts['bin_centers'] - fc) // dk),dtype=jnp.int64)
+    bin_indices = jnp.array(((counts['bin_centers'] - fc) // dk),dtype=jnp.int32)
 
     if fast:
         _Bk_fn = _Bk_jax_fast
@@ -282,7 +282,7 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
 
     Pk, Bk = _Bk_fn(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,precision,verbose)
         
-    result = np.ones((len(counts['bin_centers']),8))
+    result = np.ones((len(counts['bin_centers']),8),dtype=Bk.dtype)
     result[:,:3] = counts['bin_centers']
     result[:,3:6] = (Pk/counts['counts_P'])[bin_indices] * BoxSize**3 / grid**3
     result[:,6] = Bk * BoxSize**6 / counts['counts_B'] / grid**3
@@ -291,22 +291,21 @@ def Bk(delta,BoxSize,fc,dk,Nbins,triangle_type='All',open_triangles=True,MAS=Non
     return result
 
 def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
-    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
-    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=jnp.float64)
-    kmesh = jnp.asarray(jnp.meshgrid(kx,kx,kz,indexing='ij'))
-    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
-
     if dtype=='float32':
         rtype = jnp.float32
         ctype = jnp.complex64
     elif dtype=='float64':
         rtype = jnp.float64
         ctype = jnp.complex128
+
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=rtype)
+    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=rtype)
+    kmesh = jnp.asarray(jnp.meshgrid(kx,kx,kz,indexing='ij'),dtype=rtype)
+    del kx, kz
+    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
     
-    bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
-    bin_lower = bin_center - dk/2
-    bin_upper = bin_center + dk/2
-    bools = jnp.array([(kgrid >= bin_lower[i])*(kgrid < bin_upper[i]) for i in jnp.arange(Nbins)],dtype=ctype)
+    bools = jnp.asarray([(kgrid >= fc + i*dk - dk/2)*(kgrid < fc + i*dk + dk/2) for i in jnp.arange(Nbins)],dtype=ctype)
+    del kgrid
 
     if compute_counts:
         binned_delta = bools
@@ -320,29 +319,29 @@ def _Bk_jax_fast(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,d
         delta = delta.astype(ctype)
         binned_delta = jnp.einsum("jkl,mjkl->mjkl",delta,bools)
         
-    del kmesh
+    del kmesh, bools
     
     binned_delta = jnp.fft.irfftn(binned_delta,axes=[1,2,3])
     
-    _, Pk = jax.lax.scan(f= (lambda carry, bin: (carry,jnp.sum(binned_delta[bin]**2.))),init=0.,xs=jnp.arange(Nbins))
-    _, Bk = jax.lax.scan(f= (lambda carry, bin_index: (carry,jnp.sum(jnp.prod(binned_delta[bin_index],axis=0)))),init=0.,xs=bin_indices)
+    Pk = jnp.sum(binned_delta**2.,axis=(1,2,3),dtype=rtype)
+    _, Bk = jax.lax.scan(f= (lambda carry, bin_index: (carry,jnp.sum(jnp.prod(binned_delta[bin_index],axis=0),dtype=rtype))),init=0.,xs=bin_indices)
     
-    return Pk, Bk
+    return np.asarray(Pk), np.asarray(Bk)
 
 def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,verbose):
-    kx = jnp.fft.fftfreq(grid,1./grid,dtype=jnp.float64)
-    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=jnp.float64)
-    kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij',sparse=True)
-    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
-
     if dtype=='float32':
         rtype = jnp.float32
         ctype = jnp.complex64
     elif dtype=='float64':
         rtype = jnp.float64
         ctype = jnp.complex128
+
+    kx = jnp.fft.fftfreq(grid,1./grid,dtype=rtype)
+    kz = jnp.fft.rfftfreq(grid,1./grid,dtype=rtype)
+    kmesh = jnp.meshgrid(kx,kx,kz,indexing='ij',sparse=True)
+    kgrid = jnp.sqrt(kmesh[0]**2. + kmesh[1]**2. + kmesh[2]**2.)
     
-    bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=jnp.float64)
+    bin_center = jnp.array([fc+i*dk for i in jnp.arange(Nbins)],dtype=rtype)
     bin_lower = bin_center - dk/2
     bin_upper = bin_center + dk/2
     
@@ -353,18 +352,17 @@ def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,
 
         if MAS:
             p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
-            for i in jnp.arange(3):
-                delta *= jnp.sinc(kmesh[i]/grid)**(-p_MAS)
-
-    del kmesh
-
+            delta *= (jnp.sinc(kmesh[0]/grid)**(-p_MAS) * jnp.sinc(kmesh[1]/grid)**(-p_MAS) * jnp.sinc(kmesh[2]/grid)**(-p_MAS))
+        
     delta = delta.astype(ctype)
+        
+    del kmesh
 
     def _bin_field(field,low,high):
         return jnp.fft.irfftn(field*(kgrid >= low)*(kgrid < high))
 
     def _P(carry,i):
-        return carry, jnp.sum(_bin_field(delta,bin_lower[i],bin_upper[i])**2.)
+        return carry, jnp.sum(_bin_field(delta,bin_lower[i],bin_upper[i])**2.,dtype=rtype)
     
     def _B(carry, i):
         prev_bin_index = bin_indices[i-1]
@@ -382,13 +380,13 @@ def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,
                          lambda _: _bin_field(delta,bin_lower[bin_index[2]],bin_upper[bin_index[2]]),
                          operand=None)
         
-        return (field1,field2,field3), jnp.sum(field1 * field2 * field3)
+        return (field1,field2,field3), jnp.sum(field1 * field2 * field3,dtype=rtype)
 
     if verbose: _P = scan_tqdm(Nbins)(_P)
-    _, Pk = jax.lax.scan(f=_P,init=0,xs=jnp.arange(Nbins))
+    _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
     
     carry = (jnp.zeros((grid,grid,grid),dtype=rtype),)*3
     if verbose: _B = scan_tqdm(bin_indices.shape[0],print_rate=100)(_B)
     _, Bk = jax.lax.scan(f=_B,init=carry,xs=jnp.arange(bin_indices.shape[0]))
     
-    return Pk, Bk
+    return np.asarray(Pk), np.asarray(Bk)

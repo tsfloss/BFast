@@ -1,9 +1,9 @@
 # BFast
 A fast GPU based bispectrum estimator implemented with jax.
 
-It contains a fast, more memory heavy algorithm, that can compute the bispectrum of 2276 triangle configurations in a 256^3 box in less than a second on a V100/A100, using float32 precision (~2x for float64).
+It contains a fast, more memory heavy algorithm, that can compute the bispectrum of 2276 triangle configurations in a 256^3 box in less than a second on a V100/A100, using float32 precision (~1.5x for float64).
 
-There is also a slower, memory efficient algorithm for higher resolution grids or more bins. It computes the same 2276 triangle configurations in a 512^3 box in around 22 seconds on an A100, using float32 precision (~2x for float64).
+There is also a slower, memory efficient algorithm for higher resolution grids or more bins. It computes the same 2276 triangle configurations in a 512^3 box in under 20 seconds on an A100, using float32 precision (~1.5x for float64).
 
 Requirements:
 - numpy
@@ -18,7 +18,7 @@ Installation: clone the repository and cd into the directory then install using 
 
 ```python
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 import BFast
 import numpy as np
@@ -44,7 +44,6 @@ grid = 256
 
 
 ```python
-# df = np.load(f"df_m_256_PCS_z=0.npy")
 df = np.load(f"df_m_256_PCS_z=0.npy")
 df.dtype
 ```
@@ -119,13 +118,13 @@ help(BFast.Bk)
     No counts file found, computing this first!
     Considering 2276 Triangle Configurations (All), with kmax = 0.5184
     Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    CPU times: user 4.2 s, sys: 850 ms, total: 5.05 s
-    Wall time: 8.23 s
+    CPU times: user 2.87 s, sys: 753 ms, total: 3.62 s
+    Wall time: 5.52 s
     No counts file found, computing this first!
     Considering 2276 Triangle Configurations (All), with kmax = 0.5184
     Saved Triangle Counts to ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    CPU times: user 2.18 s, sys: 742 ms, total: 2.92 s
-    Wall time: 3.82 s
+    CPU times: user 2.62 s, sys: 788 ms, total: 3.41 s
+    Wall time: 5.25 s
 
 
 
@@ -136,7 +135,7 @@ plt.semilogy(Bks_32[:,-2])
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f282c4f1660>]
+    [<matplotlib.lines.Line2D at 0x7f3f442a4eb0>]
 
 
 
@@ -150,18 +149,14 @@ plt.semilogy(Bks_32[:,-2])
 
 
 ```python
-%time Bks_32 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float32',verbose=True)
-%time Bks_64 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float64',verbose=True)
+%time Bks_32 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float32',verbose=False)
+%time Bks_64 = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=True,precision='float64',verbose=False)
 ```
 
-    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
-    CPU times: user 629 ms, sys: 181 ms, total: 810 ms
-    Wall time: 695 ms
-    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
-    CPU times: user 797 ms, sys: 318 ms, total: 1.12 s
-    Wall time: 998 ms
+    CPU times: user 408 ms, sys: 167 ms, total: 576 ms
+    Wall time: 521 ms
+    CPU times: user 565 ms, sys: 303 ms, total: 868 ms
+    Wall time: 806 ms
 
 
 ## Float32 precision is very accurate but faster:
@@ -174,7 +169,7 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f282c114130>]
+    [<matplotlib.lines.Line2D at 0x7f3f3c3f6fb0>]
 
 
 
@@ -188,38 +183,14 @@ plt.semilogy(np.abs((Bks_32[:,-2]-Bks_64[:,-2])/Bks_64[:,-2]))
 
 
 ```python
-%time Bks_32_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float32',verbose=True)
-%time Bks_64_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float64',verbose=True)
+%time Bks_32_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float32',verbose=False)
+%time Bks_64_slow = BFast.Bk(df,BoxSize,3.,3.,27,'All',MAS='PCS',fast=False,precision='float64',verbose=False)
 ```
 
-    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat32.npy
-    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
-
-
-
-      0%|          | 0/27 [00:00<?, ?it/s]
-
-
-
-      0%|          | 0/2276 [00:00<?, ?it/s]
-
-
-    CPU times: user 4.32 s, sys: 101 ms, total: 4.42 s
-    Wall time: 5.33 s
-    Loading Counts from ./BFast_BkCounts_Grid256_BoxSize1000.00_BinSize3.00kF_FirstCenter3.00kF_NumBins27_TriangleTypeAll_OpenTrianglesTrue_Precisionfloat64.npy
-    Considering 2276 Triangle Configurations (All), with kmax = 0.5184
-
-
-
-      0%|          | 0/27 [00:00<?, ?it/s]
-
-
-
-      0%|          | 0/2276 [00:00<?, ?it/s]
-
-
-    CPU times: user 5.24 s, sys: 104 ms, total: 5.34 s
-    Wall time: 5.26 s
+    CPU times: user 3.7 s, sys: 67.8 ms, total: 3.76 s
+    Wall time: 4.9 s
+    CPU times: user 5.61 s, sys: 72 ms, total: 5.68 s
+    Wall time: 6.92 s
 
 
 ## Again, Float32 precision is very accurate but faster:
@@ -232,7 +203,7 @@ plt.semilogy(np.abs((Bks_32_slow[:,-2]-Bks_64_slow[:,-2])/Bks_64_slow[:,-2]))
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f27f81c6620>]
+    [<matplotlib.lines.Line2D at 0x7f3f1466a320>]
 
 
 
@@ -287,7 +258,7 @@ plt.loglog(Pks_32_right[:,0],Pks_32_right[:,1])
 
 
 
-    [<matplotlib.lines.Line2D at 0x7f27e8529690>]
+    [<matplotlib.lines.Line2D at 0x7f3f1449e4a0>]
 
 
 
@@ -305,14 +276,14 @@ plt.loglog(Pks_32_right[:,0],Pks_32_right[:,1])
 %time Pks_64_right = BFast.Pk(df,1000.,MAS='PCS',left_inclusive=False,precision='float64')
 ```
 
-    CPU times: user 362 ms, sys: 5.41 ms, total: 367 ms
-    Wall time: 286 ms
-    CPU times: user 372 ms, sys: 8.39 ms, total: 381 ms
-    Wall time: 297 ms
-    CPU times: user 325 ms, sys: 42 ms, total: 367 ms
-    Wall time: 324 ms
-    CPU times: user 326 ms, sys: 31.2 ms, total: 357 ms
-    Wall time: 318 ms
+    CPU times: user 329 ms, sys: 8.39 ms, total: 337 ms
+    Wall time: 258 ms
+    CPU times: user 313 ms, sys: 10.4 ms, total: 323 ms
+    Wall time: 248 ms
+    CPU times: user 303 ms, sys: 18.4 ms, total: 321 ms
+    Wall time: 281 ms
+    CPU times: user 294 ms, sys: 25.8 ms, total: 320 ms
+    Wall time: 280 ms
 
 
 ## Float32 precision is very accurate, but the speed up is minimal in this case (at this grid size!)
@@ -344,8 +315,8 @@ plt.show()
 %time Px = BFast.xPk(df,df**2.,1000.,MAS=['PCS','PCS'])
 ```
 
-    CPU times: user 728 ms, sys: 35.8 ms, total: 763 ms
-    Wall time: 1.17 s
+    CPU times: user 634 ms, sys: 16.5 ms, total: 651 ms
+    Wall time: 1.05 s
 
 
 
