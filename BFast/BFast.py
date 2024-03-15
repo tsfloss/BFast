@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import jax
 from jax_tqdm import scan_tqdm
 
-def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
+def Pk(delta,BoxSize,multipole_axis=None,MAS=None,left_inclusive=True,precision='float32'):
     """
     Computes binned powerspectrum of field
 
@@ -15,6 +15,8 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
         Real field to compute powerspectrum of
     BoxSize:
         Size of box in comoving units (Mpc/h) such that power spectrum has units (Mpc/h)^3
+    multipole_axis: int, optional (default=None):
+        Axis along which to compute power spectrum multipoles. Can be None, 0, 1 or 2. If None, only the monopole is computed.
     MAS: str, optional (default=None)
         Mass Assignment Scheme window function to compensate for (options are NGP,CIC,TSC,PCS)
     left_inclusive: bool, optional (default=True)
@@ -26,7 +28,7 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
         An array of shape (Nbins,3) containing the power spectrum and related information.
         The columns contain: {mean k of the bin, P(k), number of modes in bin}
     """
-    
+    assert multipole_axis in (None,0,1,2), "choose a valid value for multipole_axis (None, 0, 1 or 2)"
     grid = delta.shape[0]
     kF = 2*jnp.pi/BoxSize
     
@@ -51,37 +53,48 @@ def Pk(delta,BoxSize,MAS=None,left_inclusive=True,precision='float32'):
         
         def _P(fft2,i):
             binned_field = fft2*(kgrid >= bin_lower[i])*(kgrid < bin_lower[i]+1.)
-            return fft2, 0.5*jnp.sum(binned_field)
+            return fft2, 0.5*jnp.sum(binned_field,dtype=rtype)
     else:
         bin_lower = jnp.arange(0,kmax,dtype=jnp.float64)
         
         def _P(fft2,i):
             binned_field = fft2*(kgrid > bin_lower[i])*(kgrid <= bin_lower[i]+1.)
-            return fft2, 0.5*jnp.sum(binned_field)
+            return fft2, 0.5*jnp.sum(binned_field,dtype=rtype)
 
     Nbins = bin_lower.shape[0]
-
 
     if MAS:
         p_MAS = {'NGP':1., "CIC":2., "TSC":3., "PCS":4.}[MAS]
         for i in range(3):
             delta *= jnp.sinc(kmesh[i]/grid)**(-p_MAS)
         delta = delta.astype(ctype)
-        
-    del kmesh
-    
-    delta = jnp.abs(delta)**2.
-    delta, Pk = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
 
+    delta = jnp.abs(delta)**2.
+    delta, Pk_0 = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
+
+    if multipole_axis != None: 
+        mu2 = (kmesh[multipole_axis] / kgrid)**2.
+        delta_l = (delta * (3.*mu2-1.)/2.)
+        delta_l, Pk_2 = jax.lax.scan(f=_P,init=delta_l,xs=jnp.arange(Nbins))
+
+        delta_l = (delta * (35.*mu2*mu2 - 30.*mu2 + 3.)/8.)
+        delta_l, Pk_4 = jax.lax.scan(f=_P,init=delta_l,xs=jnp.arange(Nbins))
+        del delta_l
+    
     delta = jnp.ones_like(delta)
     delta, counts = jax.lax.scan(f=_P,init=delta,xs=jnp.arange(Nbins))
 
     delta, k_means = jax.lax.scan(f=_P,init=kgrid,xs=jnp.arange(Nbins))
-    
+
     k_means = kF * k_means / counts
-    Pk = Pk / counts * BoxSize**3 / grid**6
-    
-    return np.array([k_means,Pk, counts],dtype=rtype).T
+    Pk_0 = Pk_0 / counts * BoxSize**3 / grid**6
+
+    if multipole_axis != None:
+        Pk_2 = 5. * Pk_2 / counts * BoxSize**3 / grid**6
+        Pk_4 = 9. * Pk_4 / counts * BoxSize**3 / grid**6
+        return np.array([k_means,Pk_0, Pk_2, Pk_4, counts],dtype=rtype).T
+    else:
+        return np.array([k_means,Pk_0, counts],dtype=rtype).T
 
 def xPk(delta1,delta2,BoxSize,MAS=[None,None],left_inclusive=True,precision='float32'):
     """
