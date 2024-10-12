@@ -87,7 +87,7 @@ def Pk(delta,BoxSize,multipole_axis=None,MAS=None,left_inclusive=True,precision=
     delta, k_means = jax.lax.scan(f=_P,init=kgrid,xs=jnp.arange(Nbins))
 
     k_means = kF * k_means / counts
-    Pk_0 = Pk_0 / counts * BoxSize**3 / grid**6
+    Pk_0 = Pk_0 / counts * BoxSize**3 / grid**3 / grid**3
 
     if multipole_axis != None:
         Pk_2 = 5. * Pk_2 / counts * BoxSize**3 / grid**6
@@ -399,7 +399,7 @@ def _Bk_jax(delta,BoxSize,grid,fc,dk,Nbins,MAS,bin_indices,compute_counts,dtype,
     _, Pk = jax.lax.scan(f=_P,init=0.,xs=jnp.arange(Nbins))
     
     carry = (jnp.zeros((grid,grid,grid),dtype=rtype),)*3
-    if verbose: _B = scan_tqdm(bin_indices.shape[0],print_rate=100)(_B)
+    if verbose: _B = scan_tqdm(bin_indices.shape[0],print_rate=bin_indices.shape[0]//10)(_B)
     _, Bk = jax.lax.scan(f=_B,init=carry,xs=jnp.arange(bin_indices.shape[0]))
     
     return np.asarray(Pk), np.asarray(Bk)
