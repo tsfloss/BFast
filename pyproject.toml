@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "BFast"
+version = "0.0.2"
+description = "BFast: FFT-based bispectrum estimator in jax"
+readme = "README.md"
+license = "MIT"
+
+authors = [
+    { name = "Thomas Floess", email = "tsfloss@gmail.com" },
+    { name = "Lukas Winkler"}
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+requires-python = ">=3.10"
+
+dependencies = [
+    "jax",
+]
+
+[project.urls]
+Homepage = "https://github.com/tsfloss/BFast/"
+Issues = "https://github.com/tsfloss/BFast/issues"
+
+#[tool.scikit-build]
+#build.verbose = true
+#logging.level = "INFO"
+
+[tool.scikit-build.wheel.packages]
+"BFast" = "src/BFast"
