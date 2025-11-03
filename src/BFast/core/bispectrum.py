@@ -35,7 +35,7 @@ def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, f
                                 operand=None)
 
 def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
-        fast : bool = True, only_B : bool = True, compute_norm : bool = False, sharding : jax.sharding.NamedSharding = None) -> jax.Array: 
+        fast : bool = True, only_B : bool = True, compute_norm : bool = False, sharding : jax.sharding.NamedSharding | None = None) -> dict: 
     dim = len(field.shape)
     res = field.shape[0]
     kF = 2*jnp.pi/boxsize
@@ -98,9 +98,9 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
 
     results = {'triangle_centers' : triangle_centers * kF}
     if compute_norm:    
-        results['Bk'] = Bk * res**3 * res**3
+        results['Bk'] = Bk * res**3. * res**3.
         if not only_B:
-             results['Pk'] = Pk * res**3
+             results['Pk'] = Pk * res**3.
     else:
         results['Bk'] = Bk * (boxsize**2./res)**3.
         if not only_B:
