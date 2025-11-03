@@ -17,7 +17,7 @@ def fft_partitioner(fft_func: Callable[[jax.Array], jax.Array], partition_spec: 
 
     def supported_sharding(sharding, shape):
         if sharding is None:
-            # print("infer_sharding_from_operands got empty object")
+            print("infer_sharding_from_operands got empty object")
             num_gpus = jax.device_count()
             devices = mesh_utils.create_device_mesh((num_gpus,))
             mesh = Mesh(devices, axis_names=('gpus',))
