@@ -215,5 +215,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Slurm script folder
+# personal folders
 scripts/slurm
+notebooks/development
