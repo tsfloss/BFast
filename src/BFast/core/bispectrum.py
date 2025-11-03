@@ -1,9 +1,9 @@
 ## Author: Thomas Flöss (University of Vienna), 2025
 import jax
 import jax.numpy as jnp
-from .utils import get_kmesh, get_ffts, shard_3D_array
+from .utils import get_kmesh, get_ffts, get_fourier_tuple
 
-def get_triangles(bin_edges, open_triangles=True):
+def get_triangles(bin_edges, equilateral=False, open_triangles=True):
     ot = 1*open_triangles
     nbins = bin_edges.shape[0] - 1
 
@@ -17,25 +17,39 @@ def get_triangles(bin_edges, open_triangles=True):
     a, b, c = mids[i], mids[j], mids[l]
     wa, wb, wc = widths[i], widths[j], widths[l]
 
-    valid = (a - ot * wa) < ((b + ot * wb) + (c + ot * wc)) # keep only (nearly-)closed triangles
+    if equilateral:
+         valid = (a==b)&(b==c) # keep only equilateral triangles
+    else:
+         valid = (a - ot * wa) < ((b + ot * wb) + (c + ot * wc)) # keep only (nearly-)closed triangles
     mask = mask & valid
     triangle_centers = jnp.stack([a[mask], b[mask], c[mask]], axis=-1)
     triangle_indices = jnp.stack([i[mask], j[mask], l[mask]], axis=-1)
     return {'bin_edges' : bin_edges, 'triangle_centers' : triangle_centers, 'triangle_indices' : triangle_indices}
 
-def Bk(field, bin_edges, triangle_centers, triangle_indices, fast=True, sharding=None, compute_norm=False):
+def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high):
+            curr_bin = curr_bin_index[i_curr]
+            prev_bin = prev_bin_index[i_prev]
+            return jax.lax.cond(curr_bin == prev_bin,
+                                lambda _: binned_fields[i_prev],
+                                lambda _: irfftn((kmag >= bin_low[curr_bin]) * (kmag < bin_high[curr_bin])*field),
+                                operand=None)
+
+def Bk(field, boxsize, bin_edges, triangle_centers, triangle_indices, fast=True, sharding=None, only_B=True, compute_norm=False):
     dim = len(field.shape)
     res = field.shape[0]
-    rfftn, irfftn, irfftn_batch = get_ffts(dim,sharding) 
-        
+    kF = 2*jnp.pi/boxsize
+    rfftn, irfftn, irfftn_batch = get_ffts(dim,sharding)
+    fourier_shape = get_fourier_tuple(dim, res, res//2+1)
+
     bin_edges = bin_edges[:,None,None,None]
     bin_low = bin_edges[:-1]
     bin_high = bin_edges[1:]
+    nbins = bin_low.shape[0]
 
-    kmag = get_kmesh(res, sharding)
+    kmag = get_kmesh(res, dim, sharding)
 
     if compute_norm==True:
-        field = jnp.ones((res,res,res//2+1),  dtype=jnp.complex128 if jax.config.jax_enable_x64 else jnp.complex64)
+        field = jnp.ones(fourier_shape,  dtype=jnp.complex128 if jax.config.jax_enable_x64 else jnp.complex64)
         if sharding is not None:
             field = jax.device_put(field, sharding)
 
@@ -45,38 +59,51 @@ def Bk(field, bin_edges, triangle_centers, triangle_indices, fast=True, sharding
     if fast:
         fields = (kmag >= bin_low) * (kmag < bin_high) * field
         fields = irfftn_batch(fields)
-        _, Bk = jax.lax.scan(
-            jax.checkpoint(lambda c, t: (0., fields[t].prod(0).sum())),
-            init=0.,
-            xs=triangle_indices)
+
+        if not only_B:
+             _, Pk = jax.lax.scan(jax.checkpoint(lambda c, i: (0., (fields[i]**2.).sum())),
+                                  init=0.,
+                                  xs=jnp.arange(nbins))
+                                  
+
+        _, Bk = jax.lax.scan(jax.checkpoint(lambda c, t: (0., fields[t].prod(0).sum())),
+                             init=0.,
+                             xs=triangle_indices)
 
     else:
-        def field_cache(i_curr, i_prev, curr_bin_index, prev_bin_index, binned_fields):
-            curr_bin = curr_bin_index[i_curr]
-            prev_bin = prev_bin_index[i_prev]
-            return jax.lax.cond(curr_bin == prev_bin,
-                                lambda _: binned_fields[i_prev],
-                                lambda _: irfftn((kmag >= bin_low[curr_bin]) * (kmag < bin_high[curr_bin])*field),
-                                operand=None)
-        
+        if not only_B:
+            def _P(carry, i):
+                return (0., (irfftn((kmag >= bin_low[i]) * (kmag < bin_high[i])*field)**2.).sum())
+            _, Pk = jax.lax.scan(_P,
+                                  init=0.,
+                                  xs=jnp.arange(nbins))    
         def _B(binned_fields, i):
             curr_bin_index = triangle_indices[i]
             prev_bin_index = triangle_indices[i-1]
 
             #check whether side 0 is the same as previous side 0
-            field1 = field_cache(0, 0, curr_bin_index, prev_bin_index, binned_fields)
+            field1 = bin_field_or_take_previous(0, 0, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
             #check whether side 1 is the same as previous side 1
-            field2 = field_cache(1, 1, curr_bin_index, prev_bin_index, binned_fields) 
+            field2 = bin_field_or_take_previous(1, 1, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
             #check whether side 2 is the same as previous side 1
-            field3 = field_cache(2, 1, curr_bin_index, prev_bin_index, binned_fields) 
+            field3 = bin_field_or_take_previous(2, 1, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
             
             return (field1, field2, field3), (field1 * field2 * field3).sum()
         _, Bk = jax.lax.scan(jax.checkpoint(_B),
                              init=(jnp.zeros((res,res,res)),)*3,
                              xs=jnp.arange(triangle_indices.shape[0]))
-        
-    Bk *= res**6.
-    return Bk
 
-Bk.jit = jax.jit(Bk, static_argnames=('fast','sharding','compute_norm'))
-    
+    results = {'triangle_centers' : triangle_centers * kF}
+    if compute_norm:    
+        results['Bk'] = Bk * res**3 * res**3
+        if not only_B:
+             results['Pk'] = Pk * res**3
+    else:
+        results['Bk'] = Bk * (boxsize**2./res)**3.
+        if not only_B:
+            results['Pk'] = Pk * (boxsize/res)**3.
+
+    return results
+
+Bk.jit = jax.jit(Bk, static_argnames=('fast','sharding','only_B', 'compute_norm'))
+
