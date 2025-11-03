@@ -186,7 +186,7 @@ def jitted_rfftn(device_mesh: Mesh):
     sharding = NamedSharding(device_mesh, P(None, "gpus"))
     return jit(
         _rfftn,
-        donate_argnums=0,  # doesn't help
+        # donate_argnums=0,  # doesn't help
         in_shardings=sharding,
         out_shardings=sharding
     )
@@ -196,7 +196,7 @@ def jitted_irfftn(device_mesh: Mesh):
     sharding = NamedSharding(device_mesh, P(None, "gpus"))
     return jit(
         _irfftn,
-        donate_argnums=0,  # doesn't help
+        # donate_argnums=0,  # doesn't help
         # in_shardings=sharding,
         out_shardings=sharding
     )
