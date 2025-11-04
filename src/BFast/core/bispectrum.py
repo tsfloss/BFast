@@ -34,11 +34,12 @@ def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, b
                                 lambda _: bin_field(field, kmag, bin_low[curr_bin], bin_high[curr_bin], irfftn),
                                 operand=None)
 
-def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
-        fast : bool = True, only_B : bool = True, compute_norm : bool = False, sharding : jax.sharding.NamedSharding | None = None) -> dict: 
+def Bk(field : jax.Array, boxsize : float, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
+        mas_order : int = 0, fast : bool = True, only_B : bool = True, compute_norm : bool = False, sharding : jax.sharding.NamedSharding | None = None) -> dict: 
     dim = len(field.shape)
     res = field.shape[0]
     kF = 2*jnp.pi/boxsize
+    V_cell = (boxsize/res)**dim
     rfftn, irfftn = get_ffts(dim, sharding)
     fourier_shape = get_fourier_tuple(dim, res, res//2+1)
 
@@ -102,9 +103,9 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
         if not only_B:
              results['Pk'] = Pk * res**dim
     else:
-        results['Bk'] = Bk * (boxsize**2./res)**dim
+        results['Bk'] = Bk * boxsize**dim * V_cell
         if not only_B:
-            results['Pk'] = Pk * (boxsize/res)**dim
+            results['Pk'] = Pk * V_cell
 
     return results
 
