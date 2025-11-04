@@ -98,13 +98,13 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
 
     results = {'triangle_centers' : triangle_centers * kF}
     if compute_norm:    
-        results['Bk'] = Bk * res**3. * res**3.
+        results['Bk'] = Bk * res**dim * res**dim
         if not only_B:
-             results['Pk'] = Pk * res**3.
+             results['Pk'] = Pk * res**dim
     else:
-        results['Bk'] = Bk * (boxsize**2./res)**3.
+        results['Bk'] = Bk * (boxsize**2./res)**dim
         if not only_B:
-            results['Pk'] = Pk * (boxsize/res)**3.
+            results['Pk'] = Pk * (boxsize/res)**dim
 
     return results
 
