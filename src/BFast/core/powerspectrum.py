@@ -1,9 +1,31 @@
 ## Author: Thomas Flöss (University of Vienna), 2025
 import jax
 import jax.numpy as jnp
-from .utils import get_kmag, get_kmesh, get_ffts, get_mas_kernel
+from .utils import get_kmag, get_kmesh, get_ffts, get_mas_kernel, shard_3D_array
 
-def Pk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, multipole_axis : int | None = None,\
+def Pk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, multipole_axis : int | None = None, jit : bool = True, sharded : bool = False) -> dict:
+    dim = len(field.shape)
+    res = field.shape[0]
+
+    assert bin_edges[-1] <= res//2, "The maximum bin edge must be less than or equal to res/2 in order to avoid aliasing effects."
+    assert mas_order >= 0, "MAS order must be non-negative."
+    assert multipole_axis is None or (0 <= multipole_axis < dim), "Multipole axis must be None or an integer between 0 and dim-1."
+
+    if sharded:
+        assert dim == 3, "Sharded Pk computation is only implemented for 3D fields."
+        field = shard_3D_array(field)
+        sharding = field.sharding
+    else:
+        sharding = None
+
+    if jit:
+        _P = powerspectrum.jit
+    else:
+        _P = powerspectrum
+
+    return _P(field, boxsize, bin_edges, mas_order=mas_order, multipole_axis=multipole_axis, sharding=sharding)
+
+def powerspectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, multipole_axis : int | None = None,\
        sharding : jax.sharding.NamedSharding | None = None) -> dict:
     dim = len(field.shape)
     res = field.shape[0]
@@ -40,4 +62,4 @@ def Pk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : in
     
     return result
 
-Pk.jit = jax.jit(Pk, static_argnames=('sharding','mas_order','multipole_axis'))
+powerspectrum.jit = jax.jit(powerspectrum, static_argnames=('sharding','mas_order','multipole_axis'))

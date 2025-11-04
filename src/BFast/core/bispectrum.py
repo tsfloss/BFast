@@ -1,7 +1,7 @@
 ## Author: Thomas Flöss (University of Vienna), 2025
 import jax
 import jax.numpy as jnp
-from .utils import get_kmag, get_ffts, get_fourier_tuple, get_mas_kernel, bin_field
+from .utils import get_kmag, get_ffts, get_fourier_tuple, get_mas_kernel, bin_field, shard_3D_array
 
 def get_triangles(bin_edges, equilateral=False, open_triangles=True):
     ot = 1*open_triangles
@@ -33,8 +33,36 @@ def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, b
                                 lambda _: previous_fields[i_prev],
                                 lambda _: bin_field(field, kmag, bin_low[curr_bin], bin_high[curr_bin], irfftn),
                                 operand=None)
+def Bk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, open_triangles : bool = True, equilateral : bool = False, fast : bool = True, only_B : bool = False, jit : bool = True, sharded : bool = False) -> dict: 
+    dim = len(field.shape)
+    res = field.shape[0]
+    assert bin_edges[-1] <= res/3, "The maximum bin edge must be less than or equal to res/3 in order to avoid aliasing effects."
+    assert mas_order >= 0, "MAS order must be non-negative."
 
-def Bk(field : jax.Array, boxsize : float, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
+    if sharded:
+        assert dim == 3, "Sharded Bk computation is only implemented for 3D fields."
+        field = shard_3D_array(field)
+        sharding = field.sharding
+    else:
+        sharding = None
+
+    B_info = get_triangles(bin_edges, open_triangles=True)
+
+    if jit:
+        _bispectrum = bispectrum.jit
+    else:
+        _bispectrum = bispectrum
+
+    B_norm = _bispectrum(field, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=only_B, compute_norm=True, sharding=sharding)
+    B_field = _bispectrum(field, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=only_B, compute_norm=False, sharding=sharding)
+
+    B_field['Bk'] /= B_norm['Bk']
+    if not only_B: 
+        B_field['Pk'] /= B_norm['Pk']
+
+    return B_field
+
+def bispectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
         mas_order : int = 0, fast : bool = True, only_B : bool = True, compute_norm : bool = False, sharding : jax.sharding.NamedSharding | None = None) -> dict: 
     dim = len(field.shape)
     res = field.shape[0]
@@ -109,5 +137,5 @@ def Bk(field : jax.Array, boxsize : float, bin_edges : jax.Array, triangle_cente
 
     return results
 
-Bk.jit = jax.jit(Bk, static_argnames=('mas_order','fast','sharding','only_B','compute_norm'))
+bispectrum.jit = jax.jit(bispectrum, static_argnames=('mas_order','fast','sharding','only_B','compute_norm'))
 

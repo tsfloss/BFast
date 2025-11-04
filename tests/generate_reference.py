@@ -15,7 +15,7 @@ def main(dim, res, boxsize, mas_order, multipole_axis, slow=False, save=False):
     print("Pk multipole axis:", multipole_axis)
     field = jax.random.normal(jax.random.PRNGKey(2),(res,)*dim, dtype=jnp.float32).astype(jnp.float64 if jax.config.jax_enable_x64 else jnp.float32) # jnp.float32 to make sure that the random field is the same in single and double precision modes
     bin_edges = jnp.arange(1,res//2+1)
-    result_Pk = BFast.Pk(field, boxsize, bin_edges, mas_order=mas_order, multipole_axis=multipole_axis, sharding=None)
+    result_Pk = BFast.powerspectrum(field, boxsize, bin_edges, mas_order=mas_order, multipole_axis=multipole_axis, sharding=None)
     print("k:", result_Pk['k'])
     print("Pk norm:", result_Pk['norm'])
     print("Pk0:", result_Pk['Pk0'])
@@ -35,13 +35,13 @@ def main(dim, res, boxsize, mas_order, multipole_axis, slow=False, save=False):
     print("Number of triangles (only closed):", B_info_onlyclosed['triangle_centers'].shape[0])
     print("Number of triangles (including open):", B_info_openclosed['triangle_centers'].shape[0], end='\n\n')
 
-    results_norm = BFast.Bk.jit(field, boxsize, **B_info_openclosed, mas_order=mas_order, fast=not slow, only_B=False, compute_norm=True)
+    results_norm = BFast.bispectrum.jit(field, boxsize, **B_info_openclosed, mas_order=mas_order, fast=not slow, only_B=False, compute_norm=True)
     print("Pk norm:", results_norm['Pk'])
     print("Bk norm:", results_norm['Bk'], end='\n\n')
 
     if save: jnp.savez(f'reference_data/Bk_norm_PB_dim{dim}_res{res}_openclosed', **results_norm)
 
-    results_unnorm = BFast.Bk.jit(field, boxsize, **B_info_openclosed, mas_order=mas_order, fast=not slow, only_B=False, compute_norm=False)
+    results_unnorm = BFast.bispectrum.jit(field, boxsize, **B_info_openclosed, mas_order=mas_order, fast=not slow, only_B=False, compute_norm=False)
     print("Pk unnormalized:", results_unnorm['Pk'])
     print("Bk unnormalized:", results_unnorm['Bk'], end='\n\n')
 

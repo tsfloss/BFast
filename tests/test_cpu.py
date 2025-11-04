@@ -1,8 +1,12 @@
+import os
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+import pytest
 import jax
 jax.config.update("jax_platform_name", "cpu")
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import BFast
+from BFast.core.utils import shard_3D_array
 
 dim = 3
 res = 64
@@ -19,9 +23,11 @@ ref_Pk = jnp.load(f"tests/reference_data/Pk_dim{dim}_res{res}_mas{mas_order}_mul
 ref_Bk_norm = jnp.load(f"tests/reference_data/Bk_norm_PB_dim{dim}_res{res}_openclosed.npz")
 ref_Bk_meas = jnp.load(f"tests/reference_data/Bk_measured_PB_dim{dim}_res{res}_mas{mas_order}_openclosed.npz")
 
-def test_Pk():
+@pytest.mark.parametrize("jit", [True, False])
+@pytest.mark.parametrize("sharded", [True, False])
+def test_Pk(jit, sharded):
     bin_edges = jnp.arange(1,res//2+1)
-    result = BFast.Pk(field, boxsize, bin_edges, mas_order=mas_order, multipole_axis=multipole_axis, sharding=None)
+    result = BFast.Pk(field, boxsize, bin_edges, mas_order=mas_order, multipole_axis=multipole_axis, jit=jit, sharded=sharded)
     assert jnp.allclose(result['k'], ref_Pk['k'])
     assert jnp.allclose(result['norm'], ref_Pk['norm'])
     assert jnp.allclose(result['Pk0'], ref_Pk['Pk0'])
@@ -38,42 +44,38 @@ def test_Bk_triangles_openclosed():
     assert jnp.allclose(B_info['triangle_centers'], ref_triangles_openclosed['triangle_centers'])
     assert jnp.allclose(B_info['triangle_indices'], ref_triangles_openclosed['triangle_indices'])
 
-def test_Bk_norm_unjitted_fast():
-    result = BFast.Bk(field, boxsize, **B_info, mas_order=mas_order, fast=True, only_B=False, compute_norm=True)
-    assert jnp.allclose(result['Pk'], ref_Bk_norm['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_norm['Bk'])
+@pytest.mark.parametrize("jit", [True, False])
+@pytest.mark.parametrize("sharded", [True, False])
+@pytest.mark.parametrize("fast", [True, False])
+def test_Bk_norm_fast(jit, fast, sharded):
+    if sharded:
+        field2 = shard_3D_array(field)
+        sharding = field2.sharding
+    else:
+        field2 = field
+        sharding = None
 
-def test_Bk_norm_unjitted_slow():
-    result = BFast.Bk(field, boxsize, **B_info, mas_order=mas_order, fast=False, only_B=False, compute_norm=True)
-    assert jnp.allclose(result['Pk'], ref_Bk_norm['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_norm['Bk'])
+    if jit:
+        result_norm = BFast.bispectrum.jit(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=True, sharding=sharding)
+    else:
+        result_norm = BFast.bispectrum(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=True, sharding=sharding)
+    assert jnp.allclose(result_norm['Pk'], ref_Bk_norm['Pk'])
+    assert jnp.allclose(result_norm['Bk'], ref_Bk_norm['Bk'])
 
-def test_Bk_norm_jitted_fast():
-    result = BFast.Bk.jit(field, boxsize, **B_info, mas_order=mas_order, fast=True, only_B=False, compute_norm=True)
-    assert jnp.allclose(result['Pk'], ref_Bk_norm['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_norm['Bk'])
+@pytest.mark.parametrize("jit", [True, False])
+@pytest.mark.parametrize("sharded", [True, False])
+@pytest.mark.parametrize("fast", [True, False])
+def test_Bk_norm_fast(jit, fast, sharded):
+    if sharded:
+        field2 = shard_3D_array(field)
+        sharding = field2.sharding
+    else:
+        field2 = field
+        sharding = None
 
-def test_Bk_norm_jitted_slow():
-    result = BFast.Bk.jit(field, boxsize, **B_info, mas_order=mas_order, fast=False, only_B=False, compute_norm=True)
-    assert jnp.allclose(result['Pk'], ref_Bk_norm['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_norm['Bk'])
-
-def test_Bk_meas_unjitted_fast():
-    result = BFast.Bk(field, boxsize, **B_info, mas_order=mas_order, fast=True, only_B=False, compute_norm=False)
-    assert jnp.allclose(result['Pk'], ref_Bk_meas['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_meas['Bk'])
-
-def test_Bk_meas_unjitted_slow():
-    result = BFast.Bk(field, boxsize, **B_info, mas_order=mas_order, fast=False, only_B=False, compute_norm=False)
-    assert jnp.allclose(result['Pk'], ref_Bk_meas['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_meas['Bk'])
-
-def test_Bk_meas_jitted_fast():
-    result = BFast.Bk.jit(field, boxsize, **B_info, mas_order=mas_order, fast=True, only_B=False, compute_norm=False)
-    assert jnp.allclose(result['Pk'], ref_Bk_meas['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_meas['Bk'])
-
-def test_Bk_meas_jitted_slow():
-    result = BFast.Bk.jit(field, boxsize, **B_info, mas_order=mas_order, fast=False, only_B=False, compute_norm=False)
-    assert jnp.allclose(result['Pk'], ref_Bk_meas['Pk'])
-    assert jnp.allclose(result['Bk'], ref_Bk_meas['Bk'])
+    if jit:
+        result_meas = BFast.bispectrum.jit(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=False, sharding=sharding)
+    else:
+        result_meas = BFast.bispectrum(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=False, sharding=sharding)
+    assert jnp.allclose(result_meas['Pk'], ref_Bk_meas['Pk'])
+    assert jnp.allclose(result_meas['Bk'], ref_Bk_meas['Bk'])
