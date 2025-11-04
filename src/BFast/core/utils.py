@@ -25,15 +25,12 @@ def get_ffts(dim, sharding=None):
     if sharding is not None and dim==3:
         device_mesh = sharding.mesh
         rfftn = lambda x: jitted_rfftn(device_mesh)(x)
-        irfftn_batch = lambda x: jnp.array([jitted_irfftn(device_mesh)(i) for i in x])
         irfftn = lambda x: jitted_irfftn(device_mesh)(x)
     else:
         fft_axes = tuple(range(-dim,0))
         rfftn = lambda x: jnp.fft.rfftn(x, axes=fft_axes)
-        # irfftn_batch = lambda x: jnp.array([jnp.fft.irfftn(i, axes=fft_axes) for i in x])
-        irfftn_batch = lambda x: jnp.fft.irfftn(x, axes=fft_axes)
         irfftn = lambda x: jnp.fft.irfftn(x, axes=fft_axes)
-    return rfftn, irfftn, irfftn_batch
+    return rfftn, irfftn
 
 def get_fourier_tuple(dim, x,z):
     fourier_tuple = list((x,)*(dim-1))
@@ -44,3 +41,6 @@ def get_fourier_tuple(dim, x,z):
 def get_mas_kernel(mas_order, dim, res):
     kmesh = get_kmesh(dim, res)
     return (jnp.sinc(kmesh/res)**(-mas_order)).prod(0)
+
+def bin_field(field_k, kmag, bin_low, bin_high, irfftn):
+    return irfftn((kmag >= bin_low) * (kmag < bin_high)*field_k)

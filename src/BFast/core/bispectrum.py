@@ -1,7 +1,7 @@
 ## Author: Thomas Flöss (University of Vienna), 2025
 import jax
 import jax.numpy as jnp
-from .utils import get_kmag, get_ffts, get_fourier_tuple, get_mas_kernel
+from .utils import get_kmag, get_ffts, get_fourier_tuple, get_mas_kernel, bin_field
 
 def get_triangles(bin_edges, equilateral=False, open_triangles=True):
     ot = 1*open_triangles
@@ -26,12 +26,12 @@ def get_triangles(bin_edges, equilateral=False, open_triangles=True):
     triangle_indices = jnp.stack([i[mask], j[mask], l[mask]], axis=-1)
     return {'bin_edges' : bin_edges, 'triangle_centers' : triangle_centers, 'triangle_indices' : triangle_indices}
 
-def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high):
+def bin_field_or_take_previous(i_curr, i_prev, curr_bin_index, prev_bin_index, bin_low, bin_high, field, previous_fields, kmag, irfftn):
             curr_bin = curr_bin_index[i_curr]
             prev_bin = prev_bin_index[i_prev]
             return jax.lax.cond(curr_bin == prev_bin,
-                                lambda _: binned_fields[i_prev],
-                                lambda _: irfftn((kmag >= bin_low[curr_bin]) * (kmag < bin_high[curr_bin])*field),
+                                lambda _: previous_fields[i_prev],
+                                lambda _: bin_field(field, kmag, bin_low[curr_bin], bin_high[curr_bin], irfftn),
                                 operand=None)
 
 def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Array, triangle_centers : jax.Array, triangle_indices : jax.Array,\
@@ -39,7 +39,7 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
     dim = len(field.shape)
     res = field.shape[0]
     kF = 2*jnp.pi/boxsize
-    rfftn, irfftn, irfftn_batch = get_ffts(dim, sharding)
+    rfftn, irfftn = get_ffts(dim, sharding)
     fourier_shape = get_fourier_tuple(dim, res, res//2+1)
 
     bin_edges = bin_edges[:,None,None,None]
@@ -60,23 +60,23 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
             field *= get_mas_kernel(mas_order, dim, res)
     
     if fast:
-        fields = (kmag >= bin_low) * (kmag < bin_high) * field
-        fields = irfftn_batch(fields)
+        _, fields = jax.lax.scan(lambda c, i: (0., bin_field(field, kmag, bin_low[i], bin_high[i], irfftn)),
+                                 init=0.,
+                                 xs=jnp.arange(nbins))
 
         if not only_B:
              _, Pk = jax.lax.scan(jax.checkpoint(lambda c, i: (0., (fields[i]**2.).sum())),
                                   init=0.,
                                   xs=jnp.arange(nbins))
                                   
-
         _, Bk = jax.lax.scan(jax.checkpoint(lambda c, t: (0., fields[t].prod(0).sum())),
                              init=0.,
                              xs=triangle_indices)
-
+        
     else:
         if not only_B:
             def _P(carry, i):
-                return (0., (irfftn((kmag >= bin_low[i]) * (kmag < bin_high[i])*field)**2.).sum())
+                return (0., (bin_field(field, kmag, bin_low[i], bin_high[i], irfftn)**2.).sum())
             _, Pk = jax.lax.scan(jax.checkpoint(_P),
                                   init=0.,
                                   xs=jnp.arange(nbins))    
@@ -85,15 +85,15 @@ def Bk(field : jax.Array, boxsize : float, mas_order : int, bin_edges : jax.Arra
             prev_bin_index = triangle_indices[i-1]
 
             #check whether side 0 is the same as previous side 0
-            field1 = bin_field_or_take_previous(0, 0, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
+            field1 = bin_field_or_take_previous(0, 0, curr_bin_index, prev_bin_index, bin_low, bin_high, field, binned_fields, kmag, irfftn) 
             #check whether side 1 is the same as previous side 1
-            field2 = bin_field_or_take_previous(1, 1, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
+            field2 = bin_field_or_take_previous(1, 1, curr_bin_index, prev_bin_index, bin_low, bin_high, field, binned_fields, kmag, irfftn) 
             #check whether side 2 is the same as previous side 1
-            field3 = bin_field_or_take_previous(2, 1, curr_bin_index, prev_bin_index, field, binned_fields, irfftn, kmag, bin_low, bin_high) 
+            field3 = bin_field_or_take_previous(2, 1, curr_bin_index, prev_bin_index, bin_low, bin_high, field, binned_fields, kmag, irfftn) 
             
-            return (field1, field2, field3), (field1 * field2 * field3).sum()
+            return (field1, field2), (field1 * field2 * field3).sum()
         _, Bk = jax.lax.scan(jax.checkpoint(_B),
-                             init=(jnp.zeros((res,res,res)),)*3,
+                             init=(jnp.zeros((res,res,res)),)*2,
                              xs=jnp.arange(triangle_indices.shape[0]))
 
     results = {'triangle_centers' : triangle_centers * kF}

@@ -30,10 +30,3 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/tsfloss/BFast/"
 Issues = "https://github.com/tsfloss/BFast/issues"
-
-#[tool.scikit-build]
-#build.verbose = true
-#logging.level = "INFO"
-
-[tool.scikit-build.wheel.packages]
-"BFast" = "src/BFast"
