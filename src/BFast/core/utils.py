@@ -1,8 +1,9 @@
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
 from jax.sharding import PartitionSpec, NamedSharding, Mesh
-from jax.experimental import mesh_utils
-from .sharded_fft import jitted_irfftn, jitted_rfftn
+
+from .sharded_fft import irfftn_unjitted, rfftn_unjitted
+
 
 def get_kmesh(dim, res):
     kx = jnp.fft.fftfreq(res, 1/res)
@@ -23,9 +24,20 @@ def shard_3D_array(array):
 
 def get_ffts(dim, sharding=None):
     if sharding is not None and dim==3:
-        device_mesh = sharding.mesh
-        rfftn = lambda x: jitted_rfftn(device_mesh)(x)
-        irfftn = lambda x: jitted_irfftn(device_mesh)(x)
+        jitted_rfftn = jax.jit(
+            rfftn_unjitted,
+            # donate_argnums=0,  # doesn't help
+            # in_shardings=sharding,
+            out_shardings=sharding
+        )
+        jitted_irfftn = jax.jit(
+            irfftn_unjitted,
+            # donate_argnums=0,  # doesn't help
+            # in_shardings=sharding,
+            out_shardings=sharding
+        )
+        rfftn = jitted_rfftn
+        irfftn = jitted_irfftn
     else:
         fft_axes = tuple(range(-dim,0))
         rfftn = lambda x: jnp.fft.rfftn(x, axes=fft_axes)

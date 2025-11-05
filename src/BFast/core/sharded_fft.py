@@ -96,15 +96,11 @@ rfft_Z_with_vjp = jax.custom_vjp(rfft_Z)
 def _rfft_Z_fwd(x):
     n = x.shape[-1]
     assert n % 2 == 0
-    # print("_rfft_Z_fwd", x.shape, x.dtype)
-    # return jax.numpy.fft.rfft(x, axis=-1), n
     return rfft_Z(x), n
 
 
 def _rfft_Z_bwd(_, g):
     g = g.at[..., 1:-1].multiply(0.5)
-    # print("_rfft_Z_bwd", g.shape, g.dtype)
-    # output=jax.numpy.fft.irfft(g, axis=-1, norm="forward")
     output = irfft_Z_norm_forward(g)
     return (output,)
 
@@ -115,16 +111,11 @@ fftn_XY_with_vjp = jax.custom_vjp(fftn_XY)
 
 
 def _fftn_XY_fwd(x):
-    # print("_fftn_XY_fwd", x.shape, x.dtype)
     return fftn_XY(x), None  # Nothing needs to be saved
-    # return jax.numpy.fft.fftn(x, axes=[-3, -2]), None
 
 
 def _fftn_XY_bwd(_, g):
-    # print("_fftn_XY_bwd", g.shape, g.dtype)
     return (ifftn_XY_norm_forward(g.conj()),)
-    # return (jax.numpy.fft.ifftn(g.conj(), axes=[-3, -2], norm="forward"),)
-    # return (jax.numpy.fft.ifftn(g.conj(), axes=[-3, -2])*(g.shape[-3]*g.shape[-2]),)
 
 
 fftn_XY_with_vjp.defvjp(_fftn_XY_fwd, _fftn_XY_bwd)
@@ -135,14 +126,10 @@ irfft_Z_with_vjp = jax.custom_vjp(irfft_Z)
 
 
 def _irfft_Z_fwd(x):
-    # print("_irfft_Z_fwd", x.shape, x.dtype)
-    # return jax.numpy.fft.rfft(x, axis=-1), n
     return irfft_Z(x), None
 
 
 def _irfft_Z_bwd(_, g):
-    # print("_irfft_Z_bwd", g.shape, g.dtype)
-    # output=jax.numpy.fft.irfft(g, axis=-1, norm="forward")
     output = rfft_Z_norm_forward(g)
     return (output,)
 
@@ -153,50 +140,26 @@ ifftn_XY_with_vjp = jax.custom_vjp(ifftn_XY)
 
 
 def _ifftn_XY_fwd(x):
-    # print("_ifftn_XY_fwd", x.shape, x.dtype)
     return ifftn_XY(x), None  # Nothing needs to be saved
-    # return jax.numpy.fft.fftn(x, axes=[-3, -2]), None
 
 
 def _ifftn_XY_bwd(_, g):
     g = g.at[..., 1:-1].multiply(2)
-    # print("_ifftn_XY_bwd", g.shape, g.dtype)
     return (fftn_XY_norm_forward(g).conj(),)
-    # return (jax.numpy.fft.ifftn(g.conj(), axes=[-3, -2], norm="forward"),)
-    # return (jax.numpy.fft.ifftn(g.conj(), axes=[-3, -2])*(g.shape[-3]*g.shape[-2]),)
 
 
 ifftn_XY_with_vjp.defvjp(_ifftn_XY_fwd, _ifftn_XY_bwd)
 
 
 
-def _rfftn(x):
+def rfftn_unjitted(x):
     x = rfft_Z_with_vjp(x)
     x = fftn_XY_with_vjp(x)
     return x
 
 
-def _irfftn(x):
+def irfftn_unjitted(x):
     x = ifftn_XY_with_vjp(x)
     x = irfft_Z_with_vjp(x)
     return x
 
-
-def jitted_rfftn(device_mesh: Mesh):
-    sharding = NamedSharding(device_mesh, P(None, "gpus"))
-    return jit(
-        _rfftn,
-        # donate_argnums=0,  # doesn't help
-        in_shardings=sharding,
-        out_shardings=sharding
-    )
-
-
-def jitted_irfftn(device_mesh: Mesh):
-    sharding = NamedSharding(device_mesh, P(None, "gpus"))
-    return jit(
-        _irfftn,
-        # donate_argnums=0,  # doesn't help
-        # in_shardings=sharding,
-        out_shardings=sharding
-    )
