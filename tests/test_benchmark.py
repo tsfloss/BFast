@@ -1,0 +1,59 @@
+import os
+
+import jax
+import jax.numpy as jnp
+import pytest
+from jax import NamedSharding, P
+from pytest_jax_bench import JaxBench
+
+from BFast.core.bispectrum import get_triangles, bispectrum
+from shared_test_setup import shared_test_setup
+
+
+use_gpu=os.environ.get('USE_GPU',"false")=="true"
+if not use_gpu:
+    shared_test_setup()
+
+
+@pytest.mark.parametrize("sharded", [True, False])
+def test_bispectrum_sharded_bench(request, sharded):
+    num_devices = 4
+    mesh = jax.make_mesh((num_devices,), ("gpus",))
+
+    simple_sharding = NamedSharding(mesh, P(None, "gpus"))
+    dim = 3
+    res = 64
+    boxsize = 1000.
+    mas_order = 2
+
+    field = jax.random.normal(jax.random.PRNGKey(2), (res,) * dim)
+    # input is 2MB (with double precision)
+    if sharded:
+        field = jax.device_put(field, simple_sharding)
+    bin_edges = jnp.arange(1, res // 3 + 1)
+
+    B_info = get_triangles(bin_edges, open_triangles=True)
+
+    def bench_func(field, boxsize, B_info, sharding):
+        B_norm = bispectrum(field, boxsize, **B_info, mas_order=mas_order, compute_norm=True, sharding=sharding)
+        B_field = bispectrum(field, boxsize, **B_info, mas_order=mas_order, compute_norm=False, sharding=sharding)
+        B_field['Bk'] /= B_norm['Bk']
+        return B_field
+
+    jitted_bench = jax.jit(bench_func, static_argnames=["boxsize", "sharding"])
+
+    comp = jitted_bench.lower(field, boxsize, B_info, field.sharding).compile()
+    hlo = comp.as_text()
+    assert "all-gather" not in hlo
+
+    jb = JaxBench(request, jit_rounds=5, jit_warmup=1, eager_rounds=0, eager_warmup=0)
+    jb.measure(fn=bench_func, fn_jit=jitted_bench, field=field, boxsize=boxsize, B_info=B_info, sharding=field.sharding)
+
+
+def test_benchmark_just_triangles(request):
+    jb = JaxBench(request, jit_rounds=0, jit_warmup=0, eager_rounds=10, eager_warmup=1)
+    res = 64
+
+    bin_edges = jnp.arange(1, res // 3 + 1)
+
+    jb.measure(fn=get_triangles, bin_edges=bin_edges)
