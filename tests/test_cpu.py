@@ -45,7 +45,7 @@ def test_Bk_triangles_openclosed():
 @pytest.mark.parametrize("jit", [True, False])
 @pytest.mark.parametrize("sharded", [True, False])
 @pytest.mark.parametrize("fast", [True, False])
-def test_Bk_norm_fast(jit, fast, sharded):
+def test_Bk_norm(jit, fast, sharded):
     if sharded:
         field2 = shard_3D_array(field)
         sharding = field2.sharding
@@ -63,7 +63,7 @@ def test_Bk_norm_fast(jit, fast, sharded):
 @pytest.mark.parametrize("jit", [True, False])
 @pytest.mark.parametrize("sharded", [True, False])
 @pytest.mark.parametrize("fast", [True, False])
-def test_Bk_norm_fast(jit, fast, sharded):
+def test_Bk_meas(jit, fast, sharded):
     if sharded:
         field2 = shard_3D_array(field)
         sharding = field2.sharding

@@ -218,3 +218,4 @@ __marimo__/
 # personal folders
 scripts/slurm
 notebooks/development
+.benchmarks
