@@ -4,6 +4,38 @@ import jax.numpy as jnp
 from .utils import get_kmag, get_kmesh, get_ffts, get_mas_kernel, shard_3D_array
 
 def Pk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, multipole_axis : int | None = None, jit : bool = True, sharded : bool = False) -> dict:
+    '''
+    Computes the power spectrum of density field.
+    This high-level function wraps around the low-level `powerspectrum` function, adding options for JIT compilation and sharded computation.
+
+    Parameters
+    ----------
+    field : jax.Array
+        The input density field (can be 1D, 2D, or 3D).
+    boxsize : float
+        The physical size of the box in the same units as the density field.
+    bin_edges : jax.Array
+        The edges of the k-bins (in units of the fundamental mode of the field, kF = 2*pi/boxsize) to use for the power spectrum estimation.
+    mas_order : int, optional
+        The order of the mass assignment scheme to correct for, e.g. (2, 3, 4 for CIC, TSC, PCS, respectively). Default is 0 (no mass assignment correction).
+    multipole_axis : int or None, optional
+        If specified, computes the multipole moments of the power spectrum along the given axis (0, 1, or 2 for 3D fields). Default is None (only monopole).
+    jit : bool, optional
+        If True, JIT-compiles the power spectrum computation for improved performance. Default is True.
+    sharded : bool, optional
+        If True, shards the input field across available devices for distributed computation (only implemented for 3D fields). Default is False.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the computed power spectrum components and related information:
+        - 'k': The effective k-values for each bin.
+        - 'norm': The number of modes in each k-bin.
+        - 'Pk0': The monopole moment of the power spectrum.
+        - 'Pk2': The quadrupole moment of the power spectrum (if multipole_axis is specified).
+        - 'Pk4': The hexadecapole moment of the power spectrum (if multipole_axis is specified).
+    '''
+
     dim = len(field.shape)
     res = field.shape[0]
 
@@ -27,6 +59,35 @@ def Pk(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : in
 
 def powerspectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas_order : int = 0, multipole_axis : int | None = None,\
        sharding : jax.sharding.NamedSharding | None = None) -> dict:
+    '''
+    Low-level function to compute the power spectrum of a density field.
+    
+    Parameters
+    ----------
+    field : jax.Array
+        The input density field (can be 1D, 2D, or 3D).
+    boxsize : float
+        The physical size of the box in the same units as the density field.
+    bin_edges : jax.Array
+        The edges of the k-bins (in units of the fundamental mode of the field, kF = 2*pi/boxsize) to use for the power spectrum estimation.
+    mas_order : int, optional
+        The order of the mass assignment scheme to correct for, e.g. (2, 3, 4 for CIC, TSC, PCS, respectively). Default is 0 (no mass assignment correction).
+    multipole_axis : int or None, optional
+        If specified, computes the multipole moments of the power spectrum along the given axis (0, 1, or 2 for 3D fields). Default is None (only monopole).
+    sharding : jax.sharding.NamedSharding or None, optional
+        If specified, uses the given sharding for distributed computation. Default is None (no sharding).
+        
+    Returns
+    -------
+    dict
+        A dictionary containing the computed power spectrum components and related information:
+        - 'k': The effective k-values for each bin.
+        - 'norm': The number of modes in each k-bin.
+        - 'Pk0': The monopole moment of the power spectrum.
+        - 'Pk2': The quadrupole moment of the power spectrum (if multipole_axis is specified).
+        - 'Pk4': The hexadecapole moment of the power spectrum (if multipole_axis is specified).
+    '''
+    
     dim = len(field.shape)
     res = field.shape[0]
     V_cell = (boxsize/res)**dim

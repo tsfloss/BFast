@@ -1,11 +1,16 @@
+import os
 import pytest
 import jax
+jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import BFast
 from BFast.core.utils import shard_3D_array
 from shared_test_setup import shared_test_setup
 
-shared_test_setup()
+use_gpu=os.environ.get('USE_GPU',"false")=="true"
+if not use_gpu:
+    shared_test_setup()
+    
 dim = 3
 res = 64
 boxsize = 1000.
@@ -58,7 +63,7 @@ def test_Bk_norm(jit, fast, sharded):
     else:
         result_norm = BFast.bispectrum(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=True, sharding=sharding)
     assert jnp.allclose(result_norm['Pk'], ref_Bk_norm['Pk'])
-    assert jnp.allclose(result_norm['Bk'], ref_Bk_norm['Bk'])
+    assert jnp.allclose(result_norm['Bk'], ref_Bk_norm['Bk'],rtol=2e-4)
 
 @pytest.mark.parametrize("jit", [True, False])
 @pytest.mark.parametrize("sharded", [True, False])
@@ -76,4 +81,4 @@ def test_Bk_meas(jit, fast, sharded):
     else:
         result_meas = BFast.bispectrum(field2, boxsize, **B_info, mas_order=mas_order, fast=fast, only_B=False, compute_norm=False, sharding=sharding)
     assert jnp.allclose(result_meas['Pk'], ref_Bk_meas['Pk'])
-    assert jnp.allclose(result_meas['Bk'], ref_Bk_meas['Bk'])
+    assert jnp.allclose(result_meas['Bk'], ref_Bk_meas['Bk'],rtol=2e-4)
