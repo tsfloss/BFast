@@ -1,13 +1,11 @@
-import os
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 import pytest
 import jax
-jax.config.update("jax_platform_name", "cpu")
-jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import BFast
 from BFast.core.utils import shard_3D_array
+from shared_test_setup import shared_test_setup
 
+shared_test_setup()
 dim = 3
 res = 64
 boxsize = 1000.
