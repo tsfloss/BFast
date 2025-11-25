@@ -116,6 +116,7 @@ def powerspectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, mas
     if multipole_axis is not None:
         k_los = get_kmesh(dim, res)[multipole_axis]
         mu2 = (k_los/kmag)**2.
+        mu2 = mu2.at[0,0,0].set(0.)
         Pk2_unnorm, _ = jnp.histogram(kmag, bin_edges, weights=ampl2 * (3.*mu2-1.)/2.)
         Pk4_unnorm, _ = jnp.histogram(kmag, bin_edges, weights=ampl2 * (35.*mu2**2. - 30.*mu2 + 3.)/8.)
         result['Pk2'] = 5. * Pk2_unnorm / counts * V_cell
