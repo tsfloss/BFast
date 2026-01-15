@@ -1,6 +1,8 @@
 # BFast
 
-BFast is an FFT-based bispectrum estimator written entirely in jax, allowing for easy (multi-)GPU acceleration and gradients.
+BFast is an FFT-based bispectrum estimator written entirely in jax, providing (multi-)GPU acceleration and gradients.
+
+THIS IS A NEW VERSION OF THE CODE THAT SIGNIFICANTLY DIFFERS FROM THE PREVIOUS VERSION, WHICH CAN BE FOUND IN THE 'old' BRANCH
 
 ## Installation
 
