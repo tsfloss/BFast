@@ -199,6 +199,7 @@ def bispectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, triang
     bin_low = bin_edges[:-1]
     bin_high = bin_edges[1:]
     nbins = bin_low.shape[0]
+    ntriangles = triangle_indices.shape[0]
 
     kmag = get_kmag(dim, res)
 
@@ -230,13 +231,12 @@ def bispectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, triang
         if not only_B:
             def _P(carry, i):
                 return (0., (bin_field(field, kmag, bin_low[i], bin_high[i], irfftn)**2.).sum())
-            _, Pk = jax.lax.scan(jax.checkpoint(_P),
-                                  init=0.,
-                                  xs=jnp.arange(nbins))    
+
+            _, Pk = jax.lax.scan(jax.checkpoint(_P), init=0., xs=jnp.arange(nbins))
+            
         def _B(binned_fields, i):
             curr_bin_index = triangle_indices[i]
             prev_bin_index = triangle_indices[i-1]
-
             # Below we check whether we can reuse previously binned fields or need to re-bin
             # The logic can be seen from the triangles from the 'get_triangles' function:
             # For k1 > k2 > k3, k1 changes least frequently, then k2, so these can often be reused from 'themselves', while, k3 changes almost all the time, but ocassionally matches k2.
@@ -248,9 +248,10 @@ def bispectrum(field : jax.Array, boxsize : float, bin_edges : jax.Array, triang
             field3 = bin_field_or_take_previous(2, 1, curr_bin_index, prev_bin_index, bin_low, bin_high, field, binned_fields, kmag, irfftn) 
             
             return (field1, field2), (field1 * field2 * field3).sum()
+
         _, Bk = jax.lax.scan(jax.checkpoint(_B),
                              init=(jnp.zeros((res,res,res)),)*2,
-                             xs=jnp.arange(triangle_indices.shape[0]))
+                             xs=jnp.arange(ntriangles))
 
     results = {'triangle_centers' : triangle_centers * kF}
     if compute_norm:    

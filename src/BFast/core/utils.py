@@ -17,6 +17,11 @@ def get_kmag(dim, res):
     kmag = jnp.sqrt((kmesh**2).sum(0))
     return kmag
 
+def get_sharding():
+    device_mesh = Mesh(jax.devices(), axis_names=('gpus',))
+    sharding = NamedSharding(device_mesh, PartitionSpec(None, 'gpus'))
+    return sharding
+
 def shard_3D_array(array):
     device_mesh = Mesh(jax.devices(), axis_names=('gpus',))
     sharding = NamedSharding(device_mesh, PartitionSpec(None, 'gpus'))

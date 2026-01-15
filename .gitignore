@@ -216,6 +216,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 # personal folders
-scripts/slurm
+#scripts/slurm
 notebooks/development
 .benchmarks

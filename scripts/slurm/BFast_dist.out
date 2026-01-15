@@ -1,0 +1,109 @@
+Thu Jan 15 17:00:15 2026       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 535.274.02             Driver Version: 535.274.02   CUDA Version: 12.2     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA A100-SXM-64GB           On  | 00000000:1D:00.0 Off |                    0 |
+| N/A   43C    P0              66W / 485W |      0MiB / 65536MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   1  NVIDIA A100-SXM-64GB           On  | 00000000:56:00.0 Off |                    0 |
+| N/A   43C    P0              64W / 471W |      0MiB / 65536MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   2  NVIDIA A100-SXM-64GB           On  | 00000000:8F:00.0 Off |                    0 |
+| N/A   41C    P0              60W / 454W |      0MiB / 65536MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   3  NVIDIA A100-SXM-64GB           On  | 00000000:C8:00.0 Off |                    0 |
+| N/A   43C    P0              61W / 455W |      0MiB / 65536MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+E0115 17:00:51.679075   22731 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.679153   22730 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.679239   22732 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.853645   22689 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.853743   22690 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.853759   22687 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.853835   22688 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:51.913343   22729 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:52.672279   22563 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:52.672392   22562 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:52.672537   22564 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+E0115 17:00:52.672550   22561 collective_combiner_annotator.cc:137] Computed combiner threshold -21676977510 is <= 0.
+NamedSharding(mesh=Mesh('gpus': 12, axis_types=(Auto,)), spec=PartitionSpec(None, 'gpus'), memory_kind=device)
+--------  Memory usage of sharded_random_field  ---------
+const : 16 B
+code  : 15.2 kB
+temp  : 13.0 kB
+arg   : 0 B
+output: 1.1 GB
+alias : 0 B
+peak  : 1.1 GB
+<IPython.core.display.SVG object>
+(1536, 128, 1536)
+34 4284
+--------  Memory usage of bispectrum  ---------
+const : 56 B
+code  : 55.5 kB
+temp  : 43.4 GB
+arg   : 1.1 GB
+output: 67.0 kB
+alias : 0 B
+peak  : 43.4 GB
+<IPython.core.display.SVG object>
+{'Bk': Array([ 8.4277648e+07, -2.3710354e+07,  5.9767568e+07, ...,
+        2.1734992e+10, -3.1253762e+10,  1.0619050e+11], dtype=float32), 'triangle_centers': Array([[0.05340708, 0.05340708, 0.05340708],
+       [0.14765488, 0.05340708, 0.05340708],
+       [0.14765488, 0.14765488, 0.05340708],
+       ...,
+       [3.163584  , 3.163584  , 2.9750886 ],
+       [3.163584  , 3.163584  , 3.0693364 ],
+       [3.163584  , 3.163584  , 3.163584  ]],      dtype=float32, weak_type=True)}
+W0115 17:01:13.742988   22972 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugproto    job_name: "jax_worker": UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.743434   22971 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugonly    job_name: "jax_worker" task_id: 1: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused"}
+W0115 17:01:13.743455   22969 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugstr    job_name: "jax_worker" task_id: 2: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused"}
+W0115 17:01:13.743986   22970 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugstr   job_name: "jax_worker" task_id: 3: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.745835   22915 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugstr    job_name: "jax_worker" task_id: 11: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused"}
+W0115 17:01:13.745988   22914 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugonly  job_name: "jax_worker" task_id: 10: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused"}
+W0115 17:01:13.746297   22917 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugonly    job_name: "jax_worker" task_id: 8: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.748169   22789 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugproto  job_name: "jax_worker" task_id: 5: CANCELLED: CANCELLED
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:1, grpc_message:"CANCELLED"} [type.googleapis.com/tensorflow.DerivedStatus='']
+W0115 17:01:13.751675   22790 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugproto  job_name: "jax_worker" task_id: 6: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.754529   22916 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugproto   job_name: "jax_worker" task_id: 9: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.756037   22791 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugproto  job_name: "jax_worker" task_id: 4: UNAVAILABLE: failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:10.1.1.72:65110: Failed to connect to remote host: Connection refused", grpc_status:14}
+W0115 17:01:13.756580   22788 pjrt_client.cc:1480] WatchJobStateAsync failed for task goo.gle/debugonly    job_name: "jax_worker" task_id: 7: CANCELLED: CANCELLED
+Additional GRPC error information from remote target coordination_service while calling /tensorflow.CoordinationService/WatchJobState:
+:UNKNOWN:Error received from peer  {grpc_status:1, grpc_message:"CANCELLED"} [type.googleapis.com/tensorflow.DerivedStatus='']
