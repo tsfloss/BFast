@@ -219,3 +219,4 @@ __marimo__/
 #scripts/slurm
 notebooks/development
 .benchmarks
+.vscode
